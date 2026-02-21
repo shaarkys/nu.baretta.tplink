@@ -1438,7 +1438,8 @@
       "class": "socket",
       "capabilities": [
         "onoff",
-        "ledonoff"
+        "ledonoff",
+        "dim"
       ],
       "mobile": {
         "components": [
@@ -3402,7 +3403,7 @@
           {
             "name": "device",
             "type": "device",
-            "filter": "driver_id=hs220|ks230"
+            "filter": "driver_id=hs220|ks230|kp405"
           },
           {
             "name": "brightness",

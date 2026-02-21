@@ -69,9 +69,19 @@ class TPlinkPlugDevice extends Homey.Device {
 
         this.pollDevice(interval);
 
+        if (!this.hasCapability('dim')) {
+            try {
+                await this.addCapability('dim');
+                this.log('Added missing dim capability to existing device');
+            } catch (error) {
+                this.error('Failed to add dim capability:', error);
+            }
+        }
+
         this.registerCapabilityListener('onoff', this.onCapabilityOnoff.bind(this));
         // actually quite useless to have the 'ledonoff' function in the mobile interface...
         this.registerCapabilityListener('ledonoff', this.onCapabilityLedOnoff.bind(this));
+        this.registerCapabilityListener('dim', this.onCapabilityDim.bind(this));
 
         // Register flow card action listeners
         this.homey.flow.getActionCard('ledOn').registerRunListener(async (args, state) => {
@@ -88,6 +98,10 @@ class TPlinkPlugDevice extends Homey.Device {
 
         this.homey.flow.getActionCard('undo_meter_reset').registerRunListener(async (args, state) => {
             return args.device.undo_meter_reset(args.device.getSettings().settingIPAddress);
+        });
+
+        this.homey.flow.getActionCard('set_brightness').registerRunListener(async (args, state) => {
+            return args.device.setBrightness(args.device.getSettings().settingIPAddress, args.brightness);
         });
 
     } // end onInit    
@@ -208,6 +222,32 @@ class TPlinkPlugDevice extends Homey.Device {
         }
     }
 
+    async setBrightness(device, brightness) {
+        try {
+            const brightnessValue = Math.max(0, Math.min(100, Math.round(brightness)));
+            this.log('Setting brightness for device ' + device + ' to ' + brightnessValue);
+            const sysInfo = await client.getSysInfo(device);
+            this.plug = client.getPlug({ host: device, sysInfo });
+
+            if (!this.plug.dimmer) {
+                this.log('Device does not expose dimmer controls');
+                return false;
+            }
+
+            await this.plug.dimmer.setBrightness(brightnessValue);
+            await this.setCapabilityValue('dim', brightnessValue / 100);
+
+            if (brightnessValue > 0 && this.getCapabilityValue('onoff') !== true) {
+                await this.setCapabilityValue('onoff', true);
+            }
+
+            return true;
+        } catch (err) {
+            this.error('Error setting brightness:', err);
+            throw err;
+        }
+    }
+
     async getPower(device) {
         try {
             const sysInfo = await client.getSysInfo(device);
@@ -260,6 +300,19 @@ class TPlinkPlugDevice extends Homey.Device {
         } catch (err) {
             this.log('Error turning LED off: ', err.message);
 
+        }
+    }
+
+    async onCapabilityDim(value, opts) {
+        try {
+            this.log("Capability called: dim value:", value);
+            let settings = this.getSettings();
+            let device = settings["settingIPAddress"];
+            await this.setBrightness(device, value * 100);
+            return null;
+        } catch (err) {
+            this.error('Error in onCapabilityDim:', err);
+            throw err;
         }
     }
 
@@ -336,6 +389,17 @@ class TPlinkPlugDevice extends Homey.Device {
                     oldRelayState = data.sysInfo.relay_state;
                 } catch (error) {
                     this.log("Error setting capability value: " + error.message);
+                }
+            }
+
+            if (this.hasCapability('dim') && typeof data.sysInfo.brightness === 'number') {
+                const dimValue = Math.max(0, Math.min(1, data.sysInfo.brightness / 100));
+                if (this.getCapabilityValue('dim') !== dimValue) {
+                    try {
+                        await this.setCapabilityValue('dim', dimValue);
+                    } catch (error) {
+                        this.log("Error setting dim capability value: " + error.message);
+                    }
                 }
             }
 

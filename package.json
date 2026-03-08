@@ -6,7 +6,7 @@
   "repository": "https://github.com/shaarkys/nu.baretta.tplink",
   "license": "ISC",
   "dependencies": {
-    "tplink-smarthome-api": "^5.0.0"
+    "tplink-smarthome-api": "github:shaarkys/tplink-smarthome-api"
   },
   "devDependencies": {
     "@types/homey": "npm:homey-apps-sdk-v3-types@^0.3.5",

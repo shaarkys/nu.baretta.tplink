@@ -2233,6 +2233,116 @@
       ]
     },
     {
+      "id": "ks240",
+      "name": {
+        "en": "KS240 light/fan",
+        "nl": "KS240 licht/ventilator"
+      },
+      "icon": "drivers/ks240/assets/icon.svg",
+      "images": {
+        "large": "drivers/ks240/assets/images/large.jpg",
+        "small": "drivers/ks240/assets/images/small.jpg"
+      },
+      "class": "socket",
+      "capabilities": [
+        "onoff",
+        "dim"
+      ],
+      "mobile": {
+        "components": [
+          {
+            "id": "icon",
+            "capabilities": [
+              "onoff"
+            ]
+          },
+          {
+            "id": "toggle",
+            "capabilities": [
+              "onoff"
+            ]
+          }
+        ]
+      },
+      "pair": [
+        {
+          "id": "start"
+        },
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_plugs"
+          }
+        },
+        {
+          "id": "add_plugs",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "General settings",
+            "nl": "Algemene instellingen"
+          },
+          "children": [
+            {
+              "id": "settingIPAddress",
+              "type": "text",
+              "label": {
+                "en": "IP address",
+                "nl": "IP adres"
+              },
+              "value": "0.0.0.0"
+            },
+            {
+              "id": "pollingInterval",
+              "type": "number",
+              "label": {
+                "en": "Polling Interval (seconds)",
+                "nl": "Polling Interval (seconden)"
+              },
+              "value": 10,
+              "attr": {
+                "min": 2,
+                "max": 60,
+                "step": 1
+              },
+              "hint": {
+                "en": "Defines how often to poll the device for updates. Minimum is 2 seconds, maximum is 60 seconds.",
+                "nl": "Bepaalt hoe vaak het apparaat wordt gepolst voor updates. Minimum is 2 seconden, maximum is 60 seconden."
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "collapsed": "true",
+          "label": {
+            "en": "Optional connection setting",
+            "nl": "Optionele verbindingsinstelling"
+          },
+          "children": [
+            {
+              "id": "dynamicIp",
+              "type": "checkbox",
+              "value": false,
+              "label": {
+                "en": "Enable for dynamic IP address:",
+                "nl": "Inschakelen voor dynamisch IP-adres:"
+              },
+              "hint": {
+                "en": "Enable this option if your TP-Link uses a dynamic IP address. The app will then attempt to re-discover the device when it becomes unreachable.",
+                "nl": "Zet deze optie aan als de TP-Link een dynamisch toegewezen IP adres gebruikt. De app zal dan pogen het apparaat opnieuw te vinden zodra het onbereikbaar wordt."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "hs220",
       "name": {
         "en": "HS220 dimmer",
@@ -3646,7 +3756,7 @@
           {
             "name": "device",
             "type": "device",
-            "filter": "driver_id=hs220|ks230|kp405"
+            "filter": "driver_id=hs220|ks230|kp405|ks240"
           },
           {
             "name": "brightness",

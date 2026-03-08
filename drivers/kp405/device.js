@@ -234,6 +234,15 @@ class TPlinkPlugDevice extends Homey.Device {
                 return false;
             }
 
+            if (brightnessValue === 0) {
+                await this.plug.setPowerState(false);
+                await this.setCapabilityValue('dim', 0);
+                if (this.getCapabilityValue('onoff') !== false) {
+                    await this.setCapabilityValue('onoff', false);
+                }
+                return true;
+            }
+
             await this.plug.dimmer.setBrightness(brightnessValue);
             await this.setCapabilityValue('dim', brightnessValue / 100);
 
@@ -359,8 +368,11 @@ class TPlinkPlugDevice extends Homey.Device {
 
             if (settings["deviceId"] === undefined) {
                 try {
-                    await this.setSettings({ deviceId: data.sysInfo.deviceId });
-                    this.log("DeviceId added: " + settings["deviceId"]);
+                    const deviceId = data.sysInfo.deviceId || data.sysInfo.device_id;
+                    if (deviceId) {
+                        await this.setSettings({ deviceId: deviceId });
+                        this.log("DeviceId added: " + deviceId);
+                    }
                 } catch (error) {
                     this.log("Error setting deviceId: " + error.message);
                 }

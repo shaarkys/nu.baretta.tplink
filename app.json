@@ -46,6 +46,7 @@
       "KP200",
       "KP303",
       "KS240",
+      "KS200M",
       "EP40",
       "EP25"
     ],
@@ -86,6 +87,7 @@
       "KP200",
       "KP303",
       "KS240",
+      "KS200M",
       "EP40",
       "EP25"
     ]
@@ -138,6 +140,22 @@
       "getable": true,
       "setable": true,
       "uiComponent": null
+    },
+    "measure_ambient_light": {
+      "type": "number",
+      "title": {
+        "en": "Ambient light",
+        "nl": "Omgevingslicht"
+      },
+      "units": {
+        "en": "%",
+        "nl": "%"
+      },
+      "decimals": 0,
+      "insights": true,
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor"
     }
   },
   "drivers": [
@@ -1769,6 +1787,231 @@
       ]
     },
     {
+      "id": "ks200m",
+      "name": {
+        "en": "KS200M",
+        "nl": "KS200M"
+      },
+      "icon": "{{driverAssetsPath}}/icon.svg",
+      "images": {
+        "large": "drivers/ks200m/assets/images/large.jpg",
+        "small": "drivers/ks200m/assets/images/small.jpg"
+      },
+      "class": "socket",
+      "capabilities": [
+        "onoff",
+        "ledonoff",
+        "alarm_motion",
+        "measure_ambient_light"
+      ],
+      "mobile": {
+        "components": [
+          {
+            "id": "icon",
+            "capabilities": [
+              "onoff"
+            ]
+          },
+          {
+            "id": "sensor",
+            "capabilities": [
+              "alarm_motion",
+              "measure_ambient_light"
+            ]
+          },
+          {
+            "id": "toggle",
+            "capabilities": [
+              "onoff"
+            ]
+          }
+        ]
+      },
+      "pair": [
+        {
+          "id": "start"
+        },
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_plugs"
+          }
+        },
+        {
+          "id": "add_plugs",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "General settings",
+            "nl": "Algemene instellingen"
+          },
+          "children": [
+            {
+              "id": "settingIPAddress",
+              "type": "text",
+              "label": {
+                "en": "IP address",
+                "nl": "IP adres"
+              },
+              "value": "0.0.0.0"
+            },
+            {
+              "id": "pollingInterval",
+              "type": "number",
+              "label": {
+                "en": "Polling Interval (seconds)",
+                "nl": "Polling Interval (seconden)"
+              },
+              "value": 10,
+              "attr": {
+                "min": 2,
+                "max": 60,
+                "step": 1
+              },
+              "hint": {
+                "en": "Defines how often to poll the device for updates. Minimum is 2 seconds, maximum is 60 seconds.",
+                "nl": "Bepaalt hoe vaak het apparaat wordt gepolst voor updates. Minimum is 2 seconden, maximum is 60 seconden."
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "collapsed": "true",
+          "label": {
+            "en": "Motion sensor settings",
+            "nl": "Bewegingssensor instellingen"
+          },
+          "children": [
+            {
+              "id": "motionSensorEnabled",
+              "type": "checkbox",
+              "value": true,
+              "label": {
+                "en": "Enable motion sensor",
+                "nl": "Bewegingssensor inschakelen"
+              }
+            },
+            {
+              "id": "motionRangeIndex",
+              "type": "number",
+              "label": {
+                "en": "Motion range (0=Far, 1=Mid, 2=Near, 3=Custom)",
+                "nl": "Bewegingsbereik (0=Ver, 1=Midden, 2=Dichtbij, 3=Aangepast)"
+              },
+              "value": 1,
+              "attr": {
+                "min": 0,
+                "max": 3,
+                "step": 1
+              },
+              "hint": {
+                "en": "Select the PIR range preset used by the switch.",
+                "nl": "Selecteer de PIR-bereikvoorinstelling die door de schakelaar wordt gebruikt."
+              }
+            },
+            {
+              "id": "motionThreshold",
+              "type": "number",
+              "label": {
+                "en": "Custom motion threshold",
+                "nl": "Aangepaste bewegingsdrempel"
+              },
+              "value": 50,
+              "attr": {
+                "min": 0,
+                "max": 100,
+                "step": 1
+              },
+              "hint": {
+                "en": "Setting this value writes the custom PIR threshold and may switch the device to custom range.",
+                "nl": "Het instellen van deze waarde schrijft de aangepaste PIR-drempel en kan het apparaat naar aangepast bereik schakelen."
+              }
+            },
+            {
+              "id": "motionInactivityTimeoutSeconds",
+              "type": "number",
+              "label": {
+                "en": "Motion inactive timeout (seconds)",
+                "nl": "Time-out voor geen beweging (seconden)"
+              },
+              "value": 600,
+              "attr": {
+                "min": 1,
+                "max": 86400,
+                "step": 1
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "collapsed": "true",
+          "label": {
+            "en": "Ambient light settings",
+            "nl": "Omgevingslicht instellingen"
+          },
+          "children": [
+            {
+              "id": "ambientLightEnabled",
+              "type": "checkbox",
+              "value": true,
+              "label": {
+                "en": "Enable ambient light sensor",
+                "nl": "Omgevingslichtsensor inschakelen"
+              }
+            },
+            {
+              "id": "ambientLightBrightnessLimit",
+              "type": "number",
+              "label": {
+                "en": "Ambient light limit",
+                "nl": "Omgevingslicht limiet"
+              },
+              "value": 15,
+              "attr": {
+                "min": 0,
+                "max": 100,
+                "step": 1
+              },
+              "hint": {
+                "en": "Brightness threshold used by the KS200M ambient light module.",
+                "nl": "Helderheidsdrempel gebruikt door de KS200M omgevingslichtmodule."
+              }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "collapsed": "true",
+          "label": {
+            "en": "Optional connection setting",
+            "nl": "Optionele verbindingsinstelling"
+          },
+          "children": [
+            {
+              "id": "dynamicIp",
+              "type": "checkbox",
+              "value": false,
+              "label": {
+                "en": "Enable for dynamic IP address:",
+                "nl": "Inschakelen voor dynamisch IP-adres:"
+              },
+              "hint": {
+                "en": "Enable this option if your TP-Link uses a dynamic IP address. The app will then attempt to re-discover the device when it becomes unreachable.",
+                "nl": "Zet deze optie aan als de TP-Link een dynamisch toegewezen IP adres gebruikt. De app zal dan pogen het apparaat opnieuw te vinden zodra het onbereikbaar wordt."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "hs210",
       "name": {
         "en": "HS210 3-way",
@@ -3239,7 +3482,7 @@
           {
             "name": "device",
             "type": "device",
-            "filter": "driver_id=hs100|hs110|hs200|hs210|hs220|kp115|ks230|kp105|hs300|ep25"
+            "filter": "driver_id=hs100|hs110|hs200|ks200m|hs210|hs220|kp115|ks230|kp105|hs300|ep25"
           }
         ]
       },
@@ -3257,7 +3500,7 @@
           {
             "name": "device",
             "type": "device",
-            "filter": "driver_id=hs100|hs110|hs200|hs210|hs220|kp115|ks230|kp105|hs300|ep25"
+            "filter": "driver_id=hs100|hs110|hs200|ks200m|hs210|hs220|kp115|ks230|kp105|hs300|ep25"
           }
         ]
       },

@@ -3,11 +3,34 @@
 const Homey = require('homey');
 const { Client } = require('tplink-smarthome-api');
 
-const client = new Client();
-
 const DEFAULT_POLLING_INTERVAL = 10;
 const FAN_MIN_LEVEL = 0;
 const FAN_MAX_LEVEL = 4;
+
+function normalizeOptionalSetting(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getClientOptions(settings) {
+  const username = normalizeOptionalSetting(settings?.deviceUsername);
+  const password =
+    typeof settings?.devicePassword === 'string' ? settings.devicePassword : '';
+
+  if (username && password) {
+    return {
+      credentials: {
+        username,
+        password,
+      },
+    };
+  }
+
+  return {};
+}
+
+function createClientFromSettings(settings) {
+  return new Client(getClientOptions(settings));
+}
 
 function isReachabilityError(error) {
   return /(EHOSTUNREACH|ETIMEDOUT|ENETUNREACH|ECONNREFUSED)/.test(
@@ -25,6 +48,7 @@ class TPlinkKs240Device extends Homey.Device {
     const settings = this.getSettings();
     const normalizedSettings = this.normalizeSettings(settings);
     await this.applySettingsDefaults(settings, normalizedSettings);
+    this.client = createClientFromSettings(normalizedSettings);
 
     this.childId = this.getData().childId || normalizedSettings.childId;
     this.channelType = normalizedSettings.channelType || this.inferChannelType();
@@ -35,6 +59,10 @@ class TPlinkKs240Device extends Homey.Device {
     this.log('name: ', this.getName());
     this.log('class: ', this.getClass());
     this.log('settings IP address: ', normalizedSettings.settingIPAddress);
+    this.log(
+      'Local credentials configured: ' +
+        (normalizedSettings.deviceUsername ? 'yes' : 'no')
+    );
 
     await this.ensureDeviceShape();
 
@@ -106,6 +134,12 @@ class TPlinkKs240Device extends Homey.Device {
           case 'dynamicIp':
             this.log('Dynamic IP setting changed to ' + normalizedSettings.dynamicIp);
             break;
+          case 'deviceUsername':
+          case 'devicePassword':
+            this.client = createClientFromSettings(normalizedSettings);
+            this.log('Local credentials updated');
+            await this.reinitializeConnection(normalizedSettings.settingIPAddress);
+            break;
           default:
             this.log('Unhandled setting change detected for key:', key);
             break;
@@ -128,6 +162,9 @@ class TPlinkKs240Device extends Homey.Device {
       ),
       dynamicIp:
         typeof settings.dynamicIp === 'boolean' ? settings.dynamicIp : false,
+      deviceUsername: normalizeOptionalSetting(settings.deviceUsername),
+      devicePassword:
+        typeof settings.devicePassword === 'string' ? settings.devicePassword : '',
       deviceId: settings.deviceId,
       childId: settings.childId,
       channelType: settings.channelType,
@@ -187,8 +224,8 @@ class TPlinkKs240Device extends Homey.Device {
   }
 
   async getPlug(device) {
-    const sysInfo = await client.getSysInfo(device);
-    this.plug = client.getPlug({
+    const sysInfo = await this.client.getSysInfo(device);
+    this.plug = this.client.getPlug({
       host: device,
       sysInfo,
       childId: this.childId,
@@ -390,7 +427,7 @@ class TPlinkKs240Device extends Homey.Device {
     };
 
     try {
-      const discovery = client.startDiscovery(discoveryOptions);
+      const discovery = this.client.startDiscovery(discoveryOptions);
 
       const handleDiscoveredPlug = async plug => {
         try {
@@ -401,7 +438,7 @@ class TPlinkKs240Device extends Homey.Device {
           const parentDeviceId = plug.deviceId;
           if (parentDeviceId === settings.deviceId) {
             await this.setSettings({ settingIPAddress: plug.host });
-            client.stopDiscovery();
+            this.client.stopDiscovery();
             this.log('Updated KS240 host for device: ' + parentDeviceId);
             await this.setAvailable().catch(this.error);
             this.unreachableCount = 0;

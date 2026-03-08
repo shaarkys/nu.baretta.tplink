@@ -2611,6 +2611,32 @@
                 "en": "Enable this option if your TP-Link uses a dynamic IP address. The app will then attempt to re-discover the device when it becomes unreachable.",
                 "nl": "Zet deze optie aan als de TP-Link een dynamisch toegewezen IP adres gebruikt. De app zal dan pogen het apparaat opnieuw te vinden zodra het onbereikbaar wordt."
               }
+            },
+            {
+              "id": "deviceUsername",
+              "type": "text",
+              "value": "",
+              "label": {
+                "en": "Local username",
+                "nl": "Lokale gebruikersnaam"
+              },
+              "hint": {
+                "en": "Optional username for authenticated KS240 devices.",
+                "nl": "Optionele gebruikersnaam voor geauthenticeerde KS240 apparaten."
+              }
+            },
+            {
+              "id": "devicePassword",
+              "type": "text",
+              "value": "",
+              "label": {
+                "en": "Local password",
+                "nl": "Lokaal wachtwoord"
+              },
+              "hint": {
+                "en": "Optional password for authenticated KS240 devices.",
+                "nl": "Optioneel wachtwoord voor geauthenticeerde KS240 apparaten."
+              }
             }
           ]
         }

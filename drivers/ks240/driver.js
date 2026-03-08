@@ -3,8 +3,6 @@
 const Homey = require('homey');
 const { Client } = require('tplink-smarthome-api');
 
-const client = new Client();
-
 function getDriverName() {
   const parts = __dirname.replace(/\\/g, '/').split('/');
   return parts[parts.length - 1].split('.')[0];
@@ -47,9 +45,63 @@ function getChannelName(parentName, category) {
   return `${parentName} ${getChannelType(category) === 'fan' ? 'Fan' : 'Light'}`;
 }
 
+function normalizeOptionalSetting(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getClientOptions(settings) {
+  const username = normalizeOptionalSetting(settings?.deviceUsername);
+  const password =
+    typeof settings?.devicePassword === 'string' ? settings.devicePassword : '';
+
+  if (username && password) {
+    return {
+      credentials: {
+        username,
+        password,
+      },
+    };
+  }
+
+  return {};
+}
+
+function createClientFromSettings(settings) {
+  return new Client(getClientOptions(settings));
+}
+
+function getDiscoveryParentName(plug) {
+  if (typeof plug.alias === 'string' && plug.alias.length > 0) {
+    return plug.alias;
+  }
+
+  if (
+    plug.sysInfo &&
+    typeof plug.sysInfo.alias === 'string' &&
+    plug.sysInfo.alias.length > 0
+  ) {
+    return plug.sysInfo.alias;
+  }
+
+  if (
+    plug.sysInfo &&
+    typeof plug.sysInfo.dev_name === 'string' &&
+    plug.sysInfo.dev_name.length > 0
+  ) {
+    return plug.sysInfo.dev_name;
+  }
+
+  if (typeof plug.name === 'string' && plug.name.length > 0) {
+    return plug.name;
+  }
+
+  return 'KS240';
+}
+
 class TPlinkKs240Driver extends Homey.Driver {
   async onPair(session) {
     const knownChildIds = {};
+    let activeDiscoveryClient = null;
 
     try {
       const appDevices = this.getDevices();
@@ -67,10 +119,13 @@ class TPlinkKs240Driver extends Homey.Driver {
     session.setHandler('discover', async data => {
       const discoveredDevices = [];
       const inputData = Array.isArray(data) ? data : [data];
+      const firstInput = inputData.length > 0 ? inputData[0] : undefined;
       const specifiedIp =
-        inputData.length > 0 && inputData[0] && inputData[0].ip
-          ? inputData[0].ip
+        firstInput && firstInput.ip
+          ? firstInput.ip
           : undefined;
+      const discoveryClient = createClientFromSettings(firstInput);
+      activeDiscoveryClient = discoveryClient;
 
       const discoveryOptions = {
         deviceTypes: 'plug',
@@ -80,7 +135,7 @@ class TPlinkKs240Driver extends Homey.Driver {
         ...(specifiedIp ? { devices: [specifiedIp] } : {}),
       };
 
-      const discovery = client.startDiscovery(discoveryOptions);
+      const discovery = discoveryClient.startDiscovery(discoveryOptions);
       this.log(
         'Starting KS240 discovery with options: ' +
           JSON.stringify(discoveryOptions)
@@ -92,7 +147,6 @@ class TPlinkKs240Driver extends Homey.Driver {
             return;
           }
 
-          const parentInfo = await plug.getSysInfo();
           const responses = await plug.sendSmartRequests([
             { method: 'get_child_device_list' },
           ]);
@@ -101,6 +155,10 @@ class TPlinkKs240Driver extends Homey.Driver {
           const childList = Array.isArray(childListResponse.child_device_list)
             ? childListResponse.child_device_list
             : [];
+          const parentInfo = plug.sysInfo || {};
+          const parentDeviceId =
+            parentInfo.deviceId || parentInfo.device_id || plug.deviceId;
+          const parentName = getDiscoveryParentName(plug);
 
           childList.forEach(child => {
             if (typeof child.device_id !== 'string') {
@@ -109,8 +167,6 @@ class TPlinkKs240Driver extends Homey.Driver {
 
             const channelType = getChannelType(child.category);
             const childId = child.device_id;
-            const parentName =
-              parentInfo.alias || parentInfo.dev_name || plug.alias || 'KS240';
             const channelName =
               typeof child.alias === 'string' && child.alias.length > 0
                 ? child.alias
@@ -122,7 +178,7 @@ class TPlinkKs240Driver extends Homey.Driver {
                   ip: plug.host,
                   data: {
                     id: childId,
-                    parentId: parentInfo.deviceId,
+                    parentId: parentDeviceId,
                     childId,
                     channelType,
                   },
@@ -130,10 +186,17 @@ class TPlinkKs240Driver extends Homey.Driver {
                   settings: {
                     settingIPAddress: plug.host,
                     dynamicIp: false,
-                    deviceId: parentInfo.deviceId,
+                    deviceId: parentDeviceId,
                     childId,
                     channelType,
                     channelName,
+                    deviceUsername: normalizeOptionalSetting(
+                      firstInput?.deviceUsername
+                    ),
+                    devicePassword:
+                      typeof firstInput?.devicePassword === 'string'
+                        ? firstInput.devicePassword
+                        : '',
                   },
                 });
               }
@@ -148,7 +211,10 @@ class TPlinkKs240Driver extends Homey.Driver {
       discovery.on('plug-online', collectChildren);
 
       setTimeout(() => {
-        client.stopDiscovery();
+        discoveryClient.stopDiscovery();
+        if (activeDiscoveryClient === discoveryClient) {
+          activeDiscoveryClient = null;
+        }
 
         if (discoveredDevices.length > 0) {
           session.emit('discovered_devices', discoveredDevices);
@@ -180,6 +246,14 @@ class TPlinkKs240Driver extends Homey.Driver {
             typeof device.settings?.dynamicIp === 'boolean'
               ? device.settings.dynamicIp
               : false,
+          deviceUsername: normalizeOptionalSetting(
+            device.settings?.deviceUsername || device.deviceUsername
+          ),
+          devicePassword:
+            typeof (device.settings?.devicePassword || device.devicePassword) ===
+            'string'
+              ? device.settings?.devicePassword || device.devicePassword
+              : '',
           deviceId:
             device.settings?.deviceId || device.data?.parentId || undefined,
           childId: device.settings?.childId || device.data?.childId,
@@ -199,12 +273,12 @@ class TPlinkKs240Driver extends Homey.Driver {
 
     session.setHandler('cancel', () => {
       this.log('Pairing cancelled, state reset.');
-      client.stopDiscovery();
+      if (activeDiscoveryClient != null) activeDiscoveryClient.stopDiscovery();
     });
 
     session.setHandler('disconnect', () => {
       this.log('Pairing is finished (done or aborted)');
-      client.stopDiscovery();
+      if (activeDiscoveryClient != null) activeDiscoveryClient.stopDiscovery();
     });
   }
 }

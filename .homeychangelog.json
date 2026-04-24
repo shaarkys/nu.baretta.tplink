@@ -178,5 +178,8 @@
   },
   "0.2.45": {
     "en": "Fixed missing history entries for scheduled HS200 / HS103 on/off changes."
+  },
+  "0.2.46": {
+    "en": "Fixed shared driver state across multiple TP-Link device types, preventing missed history updates and cross-device polling/discovery interference when multiple devices of the same model are installed."
   }
 }

@@ -18,14 +18,6 @@ function getDriverName() {
     return parts[parts.length - 1].split('.')[0];
 };
 
-var oldpowerState = "";
-var oldtotalState = 0;
-var totalOffset = 0;
-var oldvoltageState = 0;
-var oldcurrentState = 0;
-var unreachableCount = 0;
-var discoverCount = 0;
-var oldRelayState = null;
 var TPlinkModel = getDriverName().toUpperCase();
 
 
@@ -72,14 +64,15 @@ class TPlinkPlugDevice extends Homey.Device {
         }
         this.log("dynamicIp is: " + settings["dynamicIp"]);
 
-        this.log('settings totalOffset: ', settings["totalOffset"])
-        totalOffset = settings["totalOffset"];
+        this.log('settings totalOffset: ', settings["totalOffset"])
+
+        this.totalOffset = settings["totalOffset"] || 0; 
+        this.unreachableCount = 0; 
+        this.discoverCount = 0;
 
         this.log('Initializing socket with Child ID: ', childId);
         // Initialize specific socket based on childId
         // Adjust settings, capabilities, and any other specifics for the socket
-
-        totalOffset = settings["totalOffset"];
 
         this.registerCapabilityListener('onoff', value => this.onCapabilityOnoff(value, childId));
         this.registerCapabilityListener('ledonoff', value => this.onCapabilityLedOnoff(value, childId));
@@ -314,10 +307,10 @@ async reinitializeConnection(ipAddress) {
             this.plug = client.getPlug({ host: device, sysInfo: sysInfo, childId: childId });
             // reset meter for counters in Kasa app. Does not actually clear the total counter though...
             // this.plug.emeter.eraseStats(null);
-            this.log('Setting totalOffset to oldtotalState: ' + oldtotalState);
-            totalOffset = oldtotalState;
+                        this.log('Setting totalOffset to oldtotalState: ' + this.getCapabilityValue('meter_power'));
+            this.totalOffset = this.getCapabilityValue('meter_power') || 0;
             await this.setSettings({
-                totalOffset: totalOffset
+                totalOffset: this.totalOffset
             });
         } catch (err) {
             this.log("Caught error in meter_reset: " + err.message);
@@ -329,9 +322,9 @@ async reinitializeConnection(ipAddress) {
         try {
             this.log('Undo reset meter, setting totalOffset to 0');
             // reset meter for counters in Kasa app. Does not actually clear the total counter though...
-            totalOffset = 0;
+            this.totalOffset = 0;
             await this.setSettings({
-                totalOffset: totalOffset
+                totalOffset: this.totalOffset
             });
         } catch (err) {
             this.log("Caught error in undo_meter_reset: " + err.message);
@@ -437,8 +430,8 @@ async reinitializeConnection(ipAddress) {
                         });
                         client.stopDiscovery();
                         this.log("Updated settings for discovered plug: " + plug.deviceId);
-                        unreachableCount = 0;
-                        discoverCount = 0;
+                        this.unreachableCount = 0;
+                        this.discoverCount = 0;
                         this.setAvailable();
                     }
                 } catch (error) {
@@ -457,8 +450,8 @@ async reinitializeConnection(ipAddress) {
                         });
                         client.stopDiscovery();
                         this.log("Updated settings for online plug: " + plug.deviceId);
-                        unreachableCount = 0;
-                        discoverCount = 0;
+                        this.unreachableCount = 0;
+                        this.discoverCount = 0;
                         this.setAvailable();
                     }
                 } catch (error) {

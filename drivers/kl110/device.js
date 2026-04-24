@@ -4,20 +4,12 @@ const {
     Client
 } = require('tplink-smarthome-api');
 const client = new Client();
-var oldColorTemp = "";
-var oldHue = "";
-var oldSaturation = "";
-var oldBrightness = "";
-var unreachableCount = 0;
-var discoverCount = 0;
-var oldBulbState = null;
 
 // mode: enum: color, temperature
 const mode = {
     color: 'color',
     temperature: 'temperature'
 }
-var oldMode = mode.color;
 
 // get driver name based on dirname
 function getDriverName() {
@@ -63,6 +55,15 @@ class TPlinkBulbDevice extends Homey.Device {
                 dynamicIp: false
             }).catch(this.error);
         }
+
+        this.oldColorTemp = ""; 
+        this.oldHue = ""; 
+        this.oldSaturation = ""; 
+        this.oldBrightness = ""; 
+        this.unreachableCount = 0; 
+        this.discoverCount = 0; 
+        this.oldBulbState = this.getCapabilityValue('onoff') === true ? 1 : 0; 
+        this.oldMode = mode[this.getCapabilityValue('light_mode')] || mode.color;
 
         let interval;
         // Ensures that the pollingInterval is properly set during initialization
@@ -458,16 +459,16 @@ async reinitializeConnection(ipAddress) {
                 //this.log("DeviceId: " + settings["deviceId"])
             }
 
-            oldColorTemp = this.getCapabilityValue('light_temperature');
-            oldHue = this.getCapabilityValue('light_hue');
-            oldSaturation = this.getCapabilityValue('light_saturation');
-            oldBrightness = this.getCapabilityValue('dim');
-            oldMode = mode[this.getCapabilityValue('light_mode')];
-            oldBulbState = this.getCapabilityValue('onoff') === true ? 1 : 0;
+            this.oldColorTemp = this.getCapabilityValue('light_temperature');
+            this.oldHue = this.getCapabilityValue('light_hue');
+            this.oldSaturation = this.getCapabilityValue('light_saturation');
+            this.oldBrightness = this.getCapabilityValue('dim');
+            this.oldMode = mode[this.getCapabilityValue('light_mode')];
+            this.oldBulbState = this.getCapabilityValue('onoff') === true ? 1 : 0;
 
             await this.bulb.lighting.getLightState().then((bulbState) => {
 
-                    if (oldBulbState !== bulbState.on_off) {
+                    if (this.oldBulbState !== bulbState.on_off) {
                          this.log('getLightState after change: ' + JSON.stringify(bulbState));
                         if (bulbState.on_off === 1) {
                             this.log('Bulb poll state - on');
@@ -480,7 +481,7 @@ async reinitializeConnection(ipAddress) {
                         } else {
                         //    this.log("BulbState.on_off undefined");
                         }
-                        oldBulbState = bulbState.on_off; 
+                        this.oldBulbState = bulbState.on_off; 
                     } else {
                         //    this.log("Bulb state unchanged.");
                     }
@@ -505,12 +506,12 @@ async reinitializeConnection(ipAddress) {
                             var new_light_temperature = this.round(1 - ((bulbState.color_temp - kelvinLow) / (kelvinHigh - kelvinLow)), 2);
                         }
 
-                        if (oldColorTemp != new_light_temperature) {
+                        if (this.oldColorTemp != new_light_temperature) {
                             this.log('ColorTemp changed: ' + new_light_temperature);
                             this.setCapabilityValue('light_temperature', new_light_temperature)
                                 .catch(this.error);
                         }
-                        if (oldSaturation != bulbState.saturation / 100) {
+                        if (this.oldSaturation != bulbState.saturation / 100) {
                             this.log('Saturation changed: ' + bulbState.saturation);
                             this.setCapabilityValue('light_saturation', bulbState.saturation / 100)
                                 .catch(this.error);
@@ -518,7 +519,7 @@ async reinitializeConnection(ipAddress) {
                     }
 
                     if ((TPlinkModel == "LB130") || (TPlinkModel == "KL130")) {
-                        if (oldHue != this.round((bulbState.hue / 360), 2)) {
+                        if (this.oldHue != this.round((bulbState.hue / 360), 2)) {
                             this.log('Hue changed: ' + this.round((bulbState.hue / 360), 2));
                             this.setCapabilityValue('light_hue', this.round((bulbState.hue / 360), 2))
                                 .catch(this.error);
@@ -527,7 +528,7 @@ async reinitializeConnection(ipAddress) {
 
                     if (typeof bulbState.brightness === 'number') {
                         let newBrightness = bulbState.brightness / 100;
-                        if (oldBrightness !== newBrightness) {
+                        if (this.oldBrightness !== newBrightness) {
                             this.log('Brightness changed: ' + newBrightness);
                             this.setCapabilityValue('dim', newBrightness)
                                 .catch(this.error);
@@ -536,7 +537,7 @@ async reinitializeConnection(ipAddress) {
                         this.log('Brightness data not available or not changed.');
                     }
 
-                    if (oldMode != this.getCapabilityValue('light_mode')) {
+                    if (this.oldMode != this.getCapabilityValue('light_mode')) {
                         this.log('Light_mode changed: ' + this.getCapabilityValue('light_mode'));
                     }
 
@@ -547,13 +548,13 @@ async reinitializeConnection(ipAddress) {
                 .catch((err) => {
                     var errRegEx = new RegExp("EHOSTUNREACH", 'g')
                     if (err.message.match(errRegEx)) {
-                        unreachableCount += 1;
-                        this.log("Device unreachable. Unreachable count: " + unreachableCount + " Discover count: " + discoverCount + " DynamicIP option: " + settings["dynamicIp"]);
+                        this.unreachableCount += 1;
+                        this.log("Device unreachable. Unreachable count: " + this.unreachableCount + " Discover count: " + this.discoverCount + " DynamicIP option: " + settings["dynamicIp"]);
 
                         // attempt autodiscovery once every hour
-                        if ((unreachableCount % 360 == 3) && settings["dynamicIp"]) {
+                        if ((this.unreachableCount % 360 == 3) && settings["dynamicIp"]) {
                             this.setUnavailable("Device offline");
-                            discoverCount += 1;
+                            this.discoverCount += 1;
                             this.log("Unreachable, starting autodiscovery");
                             this.discover();
                         }
@@ -603,8 +604,8 @@ pollDevice(interval) {
                 }, 1000);
                 this.log("Discovered online bulb: " + bulb.deviceId);
                 this.log("Resetting unreachable count to 0");
-                unreachableCount = 0;
-                discoverCount = 0;
+                this.unreachableCount = 0;
+                this.discoverCount = 0;
                 this.setAvailable();
             }
         })
@@ -618,8 +619,8 @@ pollDevice(interval) {
                 }, 1000);
                 this.log("Discovered online bulb: " + bulb.deviceId);
                 this.log("Resetting unreachable count to 0");
-                unreachableCount = 0;
-                discoverCount = 0;
+                this.unreachableCount = 0;
+                this.discoverCount = 0;
                 this.setAvailable();
             }
         })

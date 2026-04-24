@@ -175,5 +175,8 @@
   },
   "0.2.44": {
     "en": "Add KP405 dim capability"
+  },
+  "0.2.45": {
+    "en": "Fixed missing history entries for scheduled HS200 / HS103 on/off changes."
   }
 }

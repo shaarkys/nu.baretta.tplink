@@ -181,5 +181,8 @@
   },
   "0.2.46": {
     "en": "Fixed shared driver state across multiple TP-Link device types, preventing missed history updates and cross-device polling/discovery interference when multiple devices of the same model are installed."
+  },
+  "0.2.47": {
+    "en": "Fixed HS200 scheduled-off polling"
   }
 }

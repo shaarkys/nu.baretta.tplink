@@ -35,7 +35,7 @@
 		$(this).addClass('is-loading');
 		$('#saveSettings').addClass('is-loading');
 		document.getElementById('discovery').style.display = 'block';
-		Homey.emit('discover', {}, function (err, result) {
+		Homey.emit('discover', getCredentialFields(), function (err, result) {
 			console.log("Discovery results" + 'result');
 		});
 	});
@@ -152,7 +152,7 @@
 </div>
 
 <div id="authEntry">
-	<p>Optional local credentials for authenticated SMART devices.</p>
+	<p>Optional TP-Link account credentials for authenticated SMART devices.</p>
 	<table class="pairSettings">
 		<tr>
 			<td style="width:100px;">Username</td>
@@ -160,7 +160,7 @@
 		</tr>
 		<tr>
 			<td style="width:100px;">Password</td>
-			<td><input id="devicePassword" type="password" value="" placeholder="Device password" /></td>
+			<td><input id="devicePassword" type="password" value="" placeholder="TP-Link account password" /></td>
 		</tr>
 	</table>
 </div>

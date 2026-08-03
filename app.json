@@ -1675,7 +1675,7 @@
             },
             {
               "id": "devicePassword",
-              "type": "text",
+              "type": "password",
               "value": "",
               "label": {
                 "en": "Local password",
@@ -1812,7 +1812,7 @@
             },
             {
               "id": "devicePassword",
-              "type": "text",
+              "type": "password",
               "value": "",
               "label": {
                 "en": "Local password",
@@ -2627,7 +2627,7 @@
             },
             {
               "id": "devicePassword",
-              "type": "text",
+              "type": "password",
               "value": "",
               "label": {
                 "en": "Local password",

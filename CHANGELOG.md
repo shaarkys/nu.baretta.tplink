@@ -1,5 +1,10 @@
 # Changelog
 
+**Unreleased**
+- Added authenticated SMART discovery and control for KS225, S500D, and KS240 using TP-Link account credentials with model-specific transports.
+- Pinned the TP-Link API dependency for authenticated SMART support, hardened per-pair discovery cleanup, and masked password settings.
+- Improved polling reliability by awaiting and reconciling device status updates for ES20M, HS110, HS220, and KS230.
+
 **Version 0.2.2**
 - Added support for HS210 - 3way
 

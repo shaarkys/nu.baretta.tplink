@@ -2,34 +2,17 @@
 
 const Homey = require('homey');
 const { Client } = require('tplink-smarthome-api');
+const {
+  getTpLinkClientOptions,
+  normalizeTpLinkCredentials,
+} = require('../../lib/tplink-auth');
 
 const DEFAULT_POLLING_INTERVAL = 10;
 const FAN_MIN_LEVEL = 0;
 const FAN_MAX_LEVEL = 4;
 
-function normalizeOptionalSetting(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function getClientOptions(settings) {
-  const username = normalizeOptionalSetting(settings?.deviceUsername);
-  const password =
-    typeof settings?.devicePassword === 'string' ? settings.devicePassword : '';
-
-  if (username && password) {
-    return {
-      credentials: {
-        username,
-        password,
-      },
-    };
-  }
-
-  return {};
-}
-
 function createClientFromSettings(settings) {
-  return new Client(getClientOptions(settings));
+  return new Client(getTpLinkClientOptions('KS240', settings));
 }
 
 function isReachabilityError(error) {
@@ -60,7 +43,7 @@ class TPlinkKs240Device extends Homey.Device {
     this.log('class: ', this.getClass());
     this.log('settings IP address: ', normalizedSettings.settingIPAddress);
     this.log(
-      'Local credentials configured: ' +
+      'TP-Link account credentials configured: ' +
         (normalizedSettings.deviceUsername ? 'yes' : 'no')
     );
 
@@ -137,7 +120,7 @@ class TPlinkKs240Device extends Homey.Device {
           case 'deviceUsername':
           case 'devicePassword':
             this.client = createClientFromSettings(normalizedSettings);
-            this.log('Local credentials updated');
+            this.log('TP-Link account credentials updated');
             await this.reinitializeConnection(normalizedSettings.settingIPAddress);
             break;
           default:
@@ -152,6 +135,7 @@ class TPlinkKs240Device extends Homey.Device {
   }
 
   normalizeSettings(settings) {
+    const credentials = normalizeTpLinkCredentials(settings);
     return {
       settingIPAddress: settings.settingIPAddress,
       pollingInterval: this.normalizeInteger(
@@ -162,9 +146,8 @@ class TPlinkKs240Device extends Homey.Device {
       ),
       dynamicIp:
         typeof settings.dynamicIp === 'boolean' ? settings.dynamicIp : false,
-      deviceUsername: normalizeOptionalSetting(settings.deviceUsername),
-      devicePassword:
-        typeof settings.devicePassword === 'string' ? settings.devicePassword : '',
+      deviceUsername: credentials.username,
+      devicePassword: credentials.password,
       deviceId: settings.deviceId,
       childId: settings.childId,
       channelType: settings.channelType,

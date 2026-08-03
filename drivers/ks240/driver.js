@@ -2,6 +2,10 @@
 
 const Homey = require('homey');
 const { Client } = require('tplink-smarthome-api');
+const {
+  getTpLinkClientOptions,
+  normalizeTpLinkCredentials,
+} = require('../../lib/tplink-auth');
 
 function getDriverName() {
   const parts = __dirname.replace(/\\/g, '/').split('/');
@@ -9,7 +13,6 @@ function getDriverName() {
 }
 
 const TPLINK_MODEL = getDriverName().toUpperCase();
-const MODEL_REGEX = new RegExp(TPLINK_MODEL, 'g');
 
 function guid() {
   function s4() {
@@ -45,29 +48,8 @@ function getChannelName(parentName, category) {
   return `${parentName} ${getChannelType(category) === 'fan' ? 'Fan' : 'Light'}`;
 }
 
-function normalizeOptionalSetting(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function getClientOptions(settings) {
-  const username = normalizeOptionalSetting(settings?.deviceUsername);
-  const password =
-    typeof settings?.devicePassword === 'string' ? settings.devicePassword : '';
-
-  if (username && password) {
-    return {
-      credentials: {
-        username,
-        password,
-      },
-    };
-  }
-
-  return {};
-}
-
 function createClientFromSettings(settings) {
-  return new Client(getClientOptions(settings));
+  return new Client(getTpLinkClientOptions(TPLINK_MODEL, settings));
 }
 
 function getDiscoveryParentName(plug) {
@@ -100,59 +82,76 @@ function getDiscoveryParentName(plug) {
 
 class TPlinkKs240Driver extends Homey.Driver {
   async onPair(session) {
-    const knownChildIds = {};
+    const knownChildIds = new Set();
     let activeDiscoveryClient = null;
+    let activeDiscoveryTimer = null;
 
     try {
-      const appDevices = this.getDevices();
-      Object.values(appDevices).forEach(device => {
+      Object.values(this.getDevices()).forEach(device => {
         const childId = device.getData().id;
-        if (childId) {
-          knownChildIds[childId] = true;
+        if (typeof childId === 'string' && childId.length > 0) {
+          knownChildIds.add(childId);
         }
       });
-      this.log('Existing child IDs: ' + JSON.stringify(knownChildIds));
+      this.log('Existing child IDs: ' + knownChildIds.size);
     } catch (error) {
-      this.log(error);
+      this.log('Unable to read existing KS240 children: ' + error.message);
     }
 
+    const stopActiveDiscovery = () => {
+      if (activeDiscoveryTimer !== null) {
+        clearTimeout(activeDiscoveryTimer);
+        activeDiscoveryTimer = null;
+      }
+      if (activeDiscoveryClient !== null) {
+        activeDiscoveryClient.removeAllListeners();
+        activeDiscoveryClient.stopDiscovery();
+        activeDiscoveryClient = null;
+      }
+    };
+
     session.setHandler('discover', async data => {
+      stopActiveDiscovery();
+
       const discoveredDevices = [];
-      const inputData = Array.isArray(data) ? data : [data];
-      const firstInput = inputData.length > 0 ? inputData[0] : undefined;
-      const specifiedIp =
-        firstInput && firstInput.ip
-          ? firstInput.ip
-          : undefined;
-      const discoveryClient = createClientFromSettings(firstInput);
+      const pairingInput = Array.isArray(data) ? data[0] || {} : data || {};
+      const credentials = normalizeTpLinkCredentials(pairingInput);
+      const specifiedIp = pairingInput.ip;
+      const discoveryClient = createClientFromSettings(pairingInput);
       activeDiscoveryClient = discoveryClient;
 
       const discoveryOptions = {
-        deviceTypes: 'plug',
+        deviceTypes: ['plug'],
         discoveryInterval: 1500,
         discoveryTimeout: 3000,
         breakoutChildren: false,
-        ...(specifiedIp ? { devices: [specifiedIp] } : {}),
+        ...(typeof specifiedIp === 'string' && specifiedIp.length > 0
+          ? { devices: [{ host: specifiedIp }] }
+          : {}),
       };
-
-      const discovery = discoveryClient.startDiscovery(discoveryOptions);
-      this.log(
-        'Starting KS240 discovery with options: ' +
-          JSON.stringify(discoveryOptions)
-      );
+      const queriedParentIds = new Set();
+      let finished = false;
 
       const collectChildren = async plug => {
         try {
-          if (!plug.model.match(MODEL_REGEX)) {
+          const model = typeof plug.model === 'string' ? plug.model : '';
+          if (
+            finished ||
+            !model.startsWith(TPLINK_MODEL) ||
+            queriedParentIds.has(plug.deviceId)
+          ) {
             return;
           }
+          queriedParentIds.add(plug.deviceId);
 
           const responses = await plug.sendSmartRequests([
             { method: 'get_child_device_list' },
           ]);
+          if (finished) return;
 
           const childListResponse = responses.get_child_device_list;
-          const childList = Array.isArray(childListResponse.child_device_list)
+          const childList =
+            childListResponse && Array.isArray(childListResponse.child_device_list)
             ? childListResponse.child_device_list
             : [];
           const parentInfo = plug.sysInfo || {};
@@ -172,7 +171,7 @@ class TPlinkKs240Driver extends Homey.Driver {
                 ? child.alias
                 : getChannelName(parentName, child.category);
 
-            if (!knownChildIds[childId]) {
+            if (!knownChildIds.has(childId)) {
               if (!discoveredDevices.some(device => device.data.id === childId)) {
                 discoveredDevices.push({
                   ip: plug.host,
@@ -190,95 +189,106 @@ class TPlinkKs240Driver extends Homey.Driver {
                     childId,
                     channelType,
                     channelName,
-                    deviceUsername: normalizeOptionalSetting(
-                      firstInput?.deviceUsername
-                    ),
-                    devicePassword:
-                      typeof firstInput?.devicePassword === 'string'
-                        ? firstInput.devicePassword
-                        : '',
+                    deviceUsername: credentials.username,
+                    devicePassword: credentials.password,
                   },
                 });
               }
             }
           });
         } catch (error) {
+          queriedParentIds.delete(plug.deviceId);
           this.log('Error collecting KS240 children: ' + error.message);
         }
       };
 
-      discovery.on('plug-new', collectChildren);
-      discovery.on('plug-online', collectChildren);
-
-      setTimeout(() => {
+      const finishDiscovery = () => {
+        if (finished) return;
+        finished = true;
+        if (activeDiscoveryTimer !== null) {
+          clearTimeout(activeDiscoveryTimer);
+          activeDiscoveryTimer = null;
+        }
+        discoveryClient.removeAllListeners();
         discoveryClient.stopDiscovery();
         if (activeDiscoveryClient === discoveryClient) {
           activeDiscoveryClient = null;
         }
 
         if (discoveredDevices.length > 0) {
+          this.log('Discovered ' + discoveredDevices.length + ' KS240 child device(s)');
           session.emit('discovered_devices', discoveredDevices);
-          this.log('Discovered devices: ' + JSON.stringify(discoveredDevices));
-          return discoveredDevices;
+        } else {
+          this.log('No KS240 child devices discovered');
+          session.emit('discovery_failed', { devicesFound: false });
         }
+      };
 
-        this.log('No KS240 child devices discovered');
-        session.emit('discovery_failed', { devicesFound: false });
-        return [];
-      }, discoveryOptions.discoveryTimeout);
+      discoveryClient.on('plug-new', collectChildren);
+      discoveryClient.on('plug-online', collectChildren);
+      discoveryClient.on('error', error => {
+        this.log('KS240 discovery error: ' + error.message);
+      });
+      discoveryClient.startDiscovery(discoveryOptions);
+      activeDiscoveryTimer = setTimeout(
+        finishDiscovery,
+        discoveryOptions.discoveryTimeout + 25
+      );
+      this.log(
+        'Starting KS240 discovery with TP-Link account credentials: ' +
+          (credentials.username ? 'yes' : 'no')
+      );
     });
 
     session.setHandler('get_devices', async data => {
-      this.log('Received get_devices data: ' + JSON.stringify(data));
+      const devices = (Array.isArray(data) ? data : [data]).map(device => {
+        const settings = device.settings || {};
+        const deviceData = device.data || {};
+        const credentials = normalizeTpLinkCredentials({
+          deviceUsername: settings.deviceUsername ?? device.deviceUsername,
+          devicePassword: settings.devicePassword ?? device.devicePassword,
+        });
+        const channelType =
+          settings.channelType ?? deviceData.channelType ?? 'light';
 
-      const devices = (Array.isArray(data) ? data : [data]).map(device => ({
-        data: {
-          id: device.data?.id || guid(),
-          parentId: device.data?.parentId || device.settings?.deviceId,
-          childId: device.data?.childId || device.settings?.childId,
-          channelType:
-            device.data?.channelType || device.settings?.channelType || 'light',
-        },
-        name: device.name,
-        settings: {
-          settingIPAddress: device.settings?.settingIPAddress || device.ip,
-          dynamicIp:
-            typeof device.settings?.dynamicIp === 'boolean'
-              ? device.settings.dynamicIp
-              : false,
-          deviceUsername: normalizeOptionalSetting(
-            device.settings?.deviceUsername || device.deviceUsername
-          ),
-          devicePassword:
-            typeof (device.settings?.devicePassword || device.devicePassword) ===
-            'string'
-              ? device.settings?.devicePassword || device.devicePassword
-              : '',
-          deviceId:
-            device.settings?.deviceId || device.data?.parentId || undefined,
-          childId: device.settings?.childId || device.data?.childId,
-          channelType:
-            device.settings?.channelType ||
-            device.data?.channelType ||
-            'light',
-          channelName: device.settings?.channelName || device.name,
-        },
-      }));
+        return {
+          data: {
+            id: deviceData.id ?? guid(),
+            parentId: deviceData.parentId ?? settings.deviceId,
+            childId: deviceData.childId ?? settings.childId,
+            channelType,
+          },
+          name: device.name,
+          settings: {
+            settingIPAddress: settings.settingIPAddress ?? device.ip,
+            dynamicIp:
+              typeof settings.dynamicIp === 'boolean'
+                ? settings.dynamicIp
+                : false,
+            deviceUsername: credentials.username,
+            devicePassword: credentials.password,
+            deviceId: settings.deviceId ?? deviceData.parentId,
+            childId: settings.childId ?? deviceData.childId,
+            channelType,
+            channelName: settings.channelName ?? device.name,
+          },
+        };
+      });
 
-      this.log('Processed devices: ' + JSON.stringify(devices));
+      this.log('Processed ' + devices.length + ' KS240 pairing device(s)');
       session.emit('continue', null);
 
       session.setHandler('list_devices', async () => devices);
     });
 
     session.setHandler('cancel', () => {
-      this.log('Pairing cancelled, state reset.');
-      if (activeDiscoveryClient != null) activeDiscoveryClient.stopDiscovery();
+      this.log('KS240 pairing cancelled');
+      stopActiveDiscovery();
     });
 
     session.setHandler('disconnect', () => {
-      this.log('Pairing is finished (done or aborted)');
-      if (activeDiscoveryClient != null) activeDiscoveryClient.stopDiscovery();
+      this.log('KS240 pairing finished or aborted');
+      stopActiveDiscovery();
     });
   }
 }

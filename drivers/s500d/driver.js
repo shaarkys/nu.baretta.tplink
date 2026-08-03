@@ -5,7 +5,10 @@ const Homey = require('homey');
 const {
     Client
 } = require('tplink-smarthome-api');
-const client = new Client();
+const {
+    getTpLinkClientOptions,
+    normalizeTpLinkCredentials
+} = require('../../lib/tplink-auth');
 
 // get driver name based on dirname
 function getDriverName() {
@@ -13,13 +16,6 @@ function getDriverName() {
     return parts[parts.length - 1].split('.')[0];
 }
 var TPlinkModel = getDriverName().toUpperCase();
-var myRegEx = new RegExp(TPlinkModel, 'g');
-
-//var devIds = {};
-var logEvent = function (eventName, plug) {
-    //this.log(`${(new Date()).toISOString()} ${eventName} ${plug.model} ${plug.host} ${plug.deviceId}`);
-    console.log(`${(new Date()).toISOString()} ${eventName} ${plug.model} ${plug.host}`);
-};
 
 function getDiscoveryDeviceName(plug) {
     if (typeof plug.alias === 'string' && plug.alias.length > 0) {
@@ -41,10 +37,6 @@ function getDiscoveryDeviceName(plug) {
     return plug.model;
 }
 
-function normalizeOptionalSetting(value) {
-    return typeof value === 'string' ? value.trim() : '';
-}
-
 function guid() {
     function s4() {
         return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
@@ -55,143 +47,144 @@ function guid() {
 class TPlinkPlugDriver extends Homey.Driver {
 
     async onPair(session) {
-        // socket is a direct channel to the front-end
-        var devIds = {};
+        const knownDeviceIds = new Set();
+        let activeDiscoveryClient = null;
+        let activeDiscoveryTimer = null;
 
         try {
-            let apidevices = this.getDevices();
-            Object.values(apidevices).forEach(device => {
-
-                devIds[device.getSettings().deviceId] = "";
-            })
-            this.log("Existing devIDs: " + JSON.stringify(devIds));
+            Object.values(this.getDevices()).forEach(device => {
+                const deviceId = device.getSettings().deviceId;
+                if (typeof deviceId === 'string' && deviceId.length > 0) {
+                    knownDeviceIds.add(deviceId);
+                }
+            });
+            this.log('Existing device IDs: ' + knownDeviceIds.size);
         } catch (err) {
-            this.log(err);
+            this.log('Unable to read existing devices: ' + err.message);
         }
 
-        var id = guid();
-        let devices = [{
-            "data": {
-                "id": id
-            },
-            "name": "initial_name",
-            "settings": {
-                "settingIPAddress": "0.0.0.0",
-                "totalOffset": 0
-            } // initial settings
-        }];
+        const stopActiveDiscovery = () => {
+            if (activeDiscoveryTimer !== null) {
+                clearTimeout(activeDiscoveryTimer);
+                activeDiscoveryTimer = null;
+            }
+            if (activeDiscoveryClient !== null) {
+                activeDiscoveryClient.removeAllListeners();
+                activeDiscoveryClient.stopDiscovery();
+                activeDiscoveryClient = null;
+            }
+        };
 
-        // discover function
-        session.setHandler("discover", async (data) => {
+        session.setHandler('discover', async data => {
+            stopActiveDiscovery();
 
-            let discoveredDevicesArray = []; // Initialize an array to store discovered devices
-
-            var discoveryOptions = {
-                deviceTypes: 'plug',
+            const pairingInput = Array.isArray(data) ? data[0] || {} : data || {};
+            const credentials = normalizeTpLinkCredentials(pairingInput);
+            const discoveryClient = new Client(
+                getTpLinkClientOptions(TPlinkModel, pairingInput)
+            );
+            const discoveredDevices = [];
+            const discoveryOptions = {
+                deviceTypes: ['plug'],
                 discoveryInterval: 1500,
                 discoveryTimeout: 2000
-            }
-            client.startDiscovery(discoveryOptions);
-            this.log('Starting Plug Discovery');
-client.on('plug-new', async (plug) => {
-    try {
-        logEvent('Found plug-new type', plug);
-        const deviceName = getDiscoveryDeviceName(plug);
+            };
+            let finished = false;
 
-        if (plug.model.match(myRegEx) && !devIds.hasOwnProperty(plug.deviceId)) {
-            if (!discoveredDevicesArray.some(device => device.deviceId === plug.deviceId)) {
-                this.log("New Plug found: " + plug.host + " model " + plug.model + " name " + plug.name + " id " + plug.deviceId);
-                discoveredDevicesArray.push({
-                    ip: plug.host,
-                    name: deviceName,
-                    deviceId: plug.deviceId // Store the device ID
-                });
-            }
-        }
-    } catch (err) {
-        this.log(`Error discovering new plug: ${err.message}`);
-    }
-});
+            activeDiscoveryClient = discoveryClient;
 
-client.on('plug-online', async (plug) => {
-    try {
-        const deviceName = getDiscoveryDeviceName(plug);
+            const finishDiscovery = () => {
+                if (finished) return;
+                finished = true;
+                if (activeDiscoveryTimer !== null) {
+                    clearTimeout(activeDiscoveryTimer);
+                    activeDiscoveryTimer = null;
+                }
+                discoveryClient.removeAllListeners();
+                discoveryClient.stopDiscovery();
+                if (activeDiscoveryClient === discoveryClient) {
+                    activeDiscoveryClient = null;
+                }
 
-        if (plug.model.match(myRegEx) && !devIds.hasOwnProperty(plug.deviceId)) {
-            if (!discoveredDevicesArray.some(device => device.deviceId === plug.deviceId)) {
-                this.log("Online plug found: " + plug.host + " model " + plug.model + " name " + plug.name + " id " + plug.deviceId);
-                discoveredDevicesArray.push({
-                    ip: plug.host,
-                    name: deviceName,
-                    deviceId: plug.deviceId // Store the device ID
-                });
-            }
-        }
-    } catch (err) {
-        this.log(`Error discovering online plug: ${err.message}`);
-    }
-});
+                if (discoveredDevices.length > 0) {
+                    this.log('Discovered ' + discoveredDevices.length + ' S500D device(s)');
+                    session.emit('discovered_devices', discoveredDevices);
+                } else {
+                    this.log('No S500D devices discovered');
+                    session.emit('discovery_failed', { devicesFound: false });
+                }
+            };
 
- setTimeout(() => {
-  client.stopDiscovery(); // Stop discovery after timeout
+            const collectPlug = plug => {
+                try {
+                    const model = typeof plug.model === 'string' ? plug.model : '';
+                    if (!model.startsWith(TPlinkModel) || knownDeviceIds.has(plug.deviceId)) {
+                        return;
+                    }
+                    if (discoveredDevices.some(device => device.deviceId === plug.deviceId)) {
+                        return;
+                    }
 
-  if (discoveredDevicesArray.length > 0) {
-    session.emit("discovered_devices", discoveredDevicesArray);
-    this.log("Discovered devices: " + JSON.stringify(discoveredDevicesArray));
-    return discoveredDevicesArray;
-  } else {
-    this.log("No devices discovered");
-    session.emit("discovery_failed", { devicesFound: false });
-    return [];
-  }
-}, discoveryOptions.discoveryTimeout);
-});
+                    discoveredDevices.push({
+                        ip: plug.host,
+                        name: getDiscoveryDeviceName(plug),
+                        deviceId: plug.deviceId,
+                        deviceUsername: credentials.username,
+                        devicePassword: credentials.password
+                    });
+                } catch (err) {
+                    this.log('Error collecting discovered S500D device: ' + err.message);
+                }
+            };
 
-        // this is called when the user presses save settings button in start.html
-        session.setHandler("get_devices", async (data) => {
-            this.log("Received get_devices data: " + JSON.stringify(data));
+            discoveryClient.on('plug-new', collectPlug);
+            discoveryClient.on('plug-online', collectPlug);
+            discoveryClient.on('error', err => {
+                this.log('S500D discovery error: ' + err.message);
+            });
+            discoveryClient.startDiscovery(discoveryOptions);
+            activeDiscoveryTimer = setTimeout(
+                finishDiscovery,
+                discoveryOptions.discoveryTimeout + 25
+            );
+            this.log(
+                'Starting S500D discovery with TP-Link account credentials: ' +
+                (credentials.username ? 'yes' : 'no')
+            );
+        });
 
-            // Ensure data is always treated as an array
-            let inputData = Array.isArray(data) ? data : [data];
-
-            let devices = inputData.map(device => {
-                // Generate a unique ID for each device
-                let deviceId = guid();
+        session.setHandler('get_devices', async data => {
+            const inputData = Array.isArray(data) ? data : [data];
+            const devices = inputData.map(device => {
+                const credentials = normalizeTpLinkCredentials(device || {});
                 return {
-                    data: { id: deviceId },
+                    data: { id: guid() },
                     name: device.name,
                     settings: {
-                        "settingIPAddress": device.ip,
-                        "deviceUsername": normalizeOptionalSetting(device.deviceUsername),
-                        "devicePassword": normalizeOptionalSetting(device.devicePassword),
-                        "dynamicIp": false,
-                        "totalOffset": 0
+                        settingIPAddress: device.ip,
+                        deviceUsername: credentials.username,
+                        devicePassword: credentials.password,
+                        deviceId: device.deviceId,
+                        dynamicIp: false,
+                        totalOffset: 0
                     }
                 };
             });
 
-            // Log and return the processed devices
-            this.log("Processed devices: " + JSON.stringify(devices));
-            //            return devices;
-
-
-            // Set passed pair settings in variables
-            //this.log("Got get_devices from front-end, IP =", data.ipaddress, " Name = ", data.deviceName);
+            this.log('Processed ' + devices.length + ' S500D pairing device(s)');
             session.emit('continue', null);
-
-            // this method is run when Homey.emit('list_devices') is run on the front-end
-            // which happens when you use the template `list_devices`
-
-            session.setHandler("list_devices", async (data) => {
-                //this.log("List_devices data: " + JSON.stringify(data));
-
-                return devices;
-            });
+            session.setHandler('list_devices', async () => devices);
         });
 
-        session.setHandler("disconnect", () => {
-            this.log("Pairing is finished (done or aborted)");
-        })
+        session.setHandler('cancel', () => {
+            this.log('S500D pairing cancelled');
+            stopActiveDiscovery();
+        });
+
+        session.setHandler('disconnect', () => {
+            this.log('S500D pairing finished or aborted');
+            stopActiveDiscovery();
+        });
     }
 }
 

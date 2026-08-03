@@ -3,29 +3,10 @@ const Homey = require('homey');
 const {
     Client
 } = require('tplink-smarthome-api');
-
-function getClientOptions(settings) {
-    const username = typeof settings["deviceUsername"] === 'string'
-        ? settings["deviceUsername"].trim()
-        : '';
-    const password = typeof settings["devicePassword"] === 'string'
-        ? settings["devicePassword"]
-        : '';
-
-    if (username && password) {
-        return {
-            credentials: {
-                username,
-                password
-            }
-        };
-    }
-
-    return {};
-}
+const { getTpLinkClientOptions } = require('../../lib/tplink-auth');
 
 function createClientFromSettings(settings) {
-    return new Client(getClientOptions(settings));
+    return new Client(getTpLinkClientOptions('S500D', settings));
 }
 
 // get driver name based on dirname
@@ -79,7 +60,7 @@ class TPlinkPlugDevice extends Homey.Device {
 
         this.client = createClientFromSettings(settings);
         this.log(
-            'Local credentials configured: ' +
+            'TP-Link account credentials configured: ' +
             (settings["deviceUsername"] ? 'yes' : 'no')
         );
 
@@ -221,7 +202,7 @@ class TPlinkPlugDevice extends Homey.Device {
                     case 'deviceUsername':
                     case 'devicePassword':
                         this.client = createClientFromSettings(newSettings);
-                        this.log('Local credentials updated');
+                        this.log('TP-Link account credentials updated');
                         await this.reinitializeConnection(newSettings.settingIPAddress);
                         break;
                     default:

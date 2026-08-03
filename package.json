@@ -9,7 +9,8 @@
     "tplink-smarthome-api": "github:shaarkys/tplink-smarthome-api#450e1c3d91b7689c8f01810c31575eb73c5948f0"
   },
   "devDependencies": {
-    "@types/homey": "npm:homey-apps-sdk-v3-types@^0.3.5",
-    "eslint": "^8.56.0"
+    "@types/homey": "npm:homey-apps-sdk-v3-types@^0.3.12",
+    "eslint": "^10.8.0",
+    "globals": "^17.9.0"
   }
 }

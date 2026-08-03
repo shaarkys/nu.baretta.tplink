@@ -1,9 +1,33 @@
 # Changelog
 
 **Unreleased**
-- Added authenticated SMART discovery and control for KS225, S500D, and KS240 using TP-Link account credentials with model-specific transports.
-- Pinned the TP-Link API dependency for authenticated SMART support, hardened per-pair discovery cleanup, and masked password settings.
-- Improved polling reliability by awaiting and reconciling device status updates for ES20M, HS110, HS220, and KS230.
+
+### New authenticated SMART-device support
+
+- Added local discovery, pairing, status polling, and control for newer authenticated TP-Link SMART devices.
+- Added KS225 support using the KLAP transport, including on/off, dimming, and LED control.
+- Added S500D support using the AES transport, including on/off, dimming, and LED control.
+- Re-enabled KS240 support using the AES transport. Its fan and light channels are paired as separate Homey devices and retain their parent/child identity.
+- Added optional TP-Link account credentials to pairing and device settings for KS225, S500D, and KS240. Password fields are masked, credentials are kept with the paired device, and passwords are not written to application logs.
+- Updated discovery for authenticated devices to use TP-Link TDP v2 while retaining legacy UDP discovery for existing Kasa devices.
+- Pinned `tplink-smarthome-api` to the exact reviewed API revision used by this app, preventing future API changes from being installed unexpectedly.
+
+### Pairing and reliability
+
+- Isolated discovery state for each pairing session so simultaneous or cancelled pairing sessions do not share devices, listeners, or timers.
+- Added cleanup when pairing finishes or is cancelled to prevent stale discovery listeners and timeouts.
+- Preserved manual-IP pairing as a fallback when automatic discovery cannot cross VLAN, Wi-Fi, or firewall boundaries.
+- Improved polling for ES20M, HS110, HS220, and KS230 by waiting for Homey capability updates and reconciling device state more consistently.
+- Preserved existing driver IDs, capability IDs, paired-device data, and Flow compatibility.
+
+### Community testing requested
+
+- KS225, S500D, and KS240 owners are asked to test both automatic discovery and manual-IP pairing with their TP-Link account credentials, followed by on/off and dimming control. KS225 and S500D owners should also test LED control; KS240 owners should test both the fan and light channels.
+- Existing ES20M, HS110, HS220, and KS230 users are asked to confirm that paired devices remain available after the update and that status, controls, measurements, and existing Flows continue to work.
+- Physical-device testing was not possible before this release because no volunteer hardware access was available following the earlier community request. The implementation passed source, unit, dependency, and Homey package validation, but real-device behavior still needs community confirmation.
+- If something stops working, do not remove the paired device immediately because doing so can affect existing Flows. Restart the TP-Link KASA LAN app once, reproduce the problem, and create a Homey app diagnostic report as soon as possible.
+- When reporting a problem, include the diagnostic-report ID, exact TP-Link model and hardware/firmware version, Homey model and firmware version, app version, whether the device was already paired or newly paired, automatic or manual-IP pairing, the failed action, and the approximate time of the failure.
+- Never post TP-Link credentials, Homey credentials, access tokens, public IP addresses, or remote-access details. Use a private message only if additional coordination is required.
 
 **Version 0.2.2**
 - Added support for HS210 - 3way

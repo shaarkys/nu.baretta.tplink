@@ -187,5 +187,8 @@
   },
   "0.3.0": {
     "en": "New authenticated SMART-device support"
+  },
+  "0.3.1": {
+    "en": "Added authenticated Kasa EP10 support for newer firmware, including improved automatic and manual IP pairing."
   }
 }

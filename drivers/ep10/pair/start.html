@@ -35,9 +35,8 @@
 		$(this).addClass('is-loading');
 		$('#saveSettings').addClass('is-loading');
 		document.getElementById('discovery').style.display = 'block';
-		Homey.emit('discover', {}, function (err, result) {
-			console.log("Discovery results" + 'result');
-		});
+		discoveredDevices = [];
+		Homey.emit('discover', getCredentialFields()).catch(showPairingError);
 	});
 
 	Homey.on('discovered_devices', function (devices) {
@@ -66,9 +65,14 @@
 
 
 	function saveSettings() {
+		$('#saveSettings').addClass('is-loading');
+		const credentials = getCredentialFields();
 		// Check if manual entry fields are hidden (i.e., devices have been discovered)
 		if (discoveredDevices.length > 0) {
-			Homey.emit('get_devices', discoveredDevices);
+			Homey.emit('get_devices', discoveredDevices.map(device => ({
+				...device,
+				...credentials
+			}))).catch(showPairingError);
 		} else {
 			// variables
 			var inputIPAddress = document.getElementById('ipAddress').value;
@@ -81,6 +85,7 @@
 
 			if (!IPInputOK) {
 				Homey.alert(__('pair.start.invalidIP'), 'error');
+				$('#saveSettings').removeClass('is-loading');
 				return;
 			}
 
@@ -89,16 +94,18 @@
 				// Build data array
 				var data = [{
 					ip: inputIPAddress,
-					name: inputDeviceName
+					name: inputDeviceName,
+					...credentials
 				}];
 
 				// Continue to back-end, pass along data
-				Homey.emit('get_devices', data);
+				Homey.emit('get_devices', data).catch(showPairingError);
 
 			} else {
 
 				// Give error, required values
 				Homey.alert(__('pair.start.required'), 'error');
+				$('#saveSettings').removeClass('is-loading');
 				// Homey.done() closes the pairing window
 				Homey.done();
 
@@ -106,6 +113,20 @@
 
 		}
 
+	}
+
+	function getCredentialFields() {
+		return {
+			deviceUsername: document.getElementById('deviceUsername').value.trim(),
+			devicePassword: document.getElementById('devicePassword').value
+		};
+	}
+
+	function showPairingError(error) {
+		$('#startdiscovery').removeClass('is-loading');
+		$('#saveSettings').removeClass('is-loading');
+		const message = error && error.message ? error.message : __('pair.start.error');
+		Homey.alert(message, 'error');
 	}
 
 </script>
@@ -134,6 +155,20 @@
 		<tr>
 			<td style="width:100px;"><span data-i18n="pair.start.deviceName"></span></td>
 			<td><input id="deviceName" type="text" value="" placeholder="TP-Link Device" /></td>
+		</tr>
+	</table>
+</div>
+
+<div id="authEntry">
+	<p data-i18n="pair.start.tpLinkCredentials"></p>
+	<table class="pairSettings">
+		<tr>
+			<td style="width:100px;"><span data-i18n="pair.start.tpLinkEmail"></span></td>
+			<td><input id="deviceUsername" type="text" value="" data-i18n="[placeholder]pair.start.tpLinkEmailPlaceholder" /></td>
+		</tr>
+		<tr>
+			<td style="width:100px;"><span data-i18n="pair.start.tpLinkPassword"></span></td>
+			<td><input id="devicePassword" type="password" value="" data-i18n="[placeholder]pair.start.tpLinkPasswordPlaceholder" /></td>
 		</tr>
 	</table>
 </div>

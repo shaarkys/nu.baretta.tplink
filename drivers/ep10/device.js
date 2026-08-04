@@ -3,7 +3,13 @@ const Homey = require('homey');
 const {
     Client
 } = require('tplink-smarthome-api');
-const client = new Client();
+const {
+    getEp10ClientOptions,
+    getEp10Transport,
+    getTpLinkDiscoveryClientOptions,
+    isValidTpLinkTransport,
+    normalizeTpLinkCredentials
+} = require('../../lib/tplink-auth');
 
 // get driver name based on dirname
 function getDriverName() {
@@ -12,6 +18,34 @@ function getDriverName() {
 };
 
 var TPlinkModel = getDriverName().toUpperCase();
+
+function createClientFromSettings(data, settings, activeTransport) {
+    const options = getEp10ClientOptions(data, settings);
+
+    if (!isValidTpLinkTransport(data.transport) && isValidTpLinkTransport(activeTransport)) {
+        options.defaultSendOptions.transport = activeTransport;
+    }
+
+    return new Client(options);
+}
+
+function getSafeErrorMessage(error, settings = {}) {
+    let message = error && typeof error.message === 'string' ? error.message : 'Unknown error';
+    const credentials = normalizeTpLinkCredentials(settings);
+
+    [credentials.username, credentials.password]
+        .filter(value => value.length > 0)
+        .forEach(secret => {
+            message = message.split(secret).join('[redacted]');
+        });
+
+    return message;
+}
+
+function getDiscoveredTransport(plug) {
+    const transport = plug && plug.defaultSendOptions ? plug.defaultSendOptions.transport : undefined;
+    return isValidTpLinkTransport(transport) ? transport : undefined;
+}
 
 
 class TPlinkPlugDevice extends Homey.Device {
@@ -39,6 +73,12 @@ class TPlinkPlugDevice extends Homey.Device {
             }).catch(this.error);
         }
 
+        this.activeTransport = getEp10Transport(this.getData(), settings);
+        this.client = createClientFromSettings(this.getData(), settings, this.activeTransport);
+        this.activeDiscovery = null;
+        this.log('EP10 transport configured: ' + this.activeTransport);
+        this.log('TP-Link account credentials configured: ' + (normalizeTpLinkCredentials(settings).username ? 'yes' : 'no'));
+
         this.log('settings totalOffset: ', settings["totalOffset"])
 
 
@@ -62,7 +102,7 @@ class TPlinkPlugDevice extends Homey.Device {
                 this.log("Polling interval was undefined, set to default: 10 seconds");
                 interval = 10; // Set interval to default after ensuring settings are applied
             } catch (error) {
-                this.error('Failed to set default polling interval:', error);
+                this.error('Failed to set default polling interval: ' + getSafeErrorMessage(error, settings));
                 interval = 10; // Optionally set a default even in case of error to ensure continuity
             }
         }
@@ -103,6 +143,7 @@ class TPlinkPlugDevice extends Homey.Device {
         let id = this.getData().id;
         this.log("Device deleted: " + id);
         clearInterval(this.pollingInterval);
+        this.stopActiveDiscovery();
     }
 
     // this method is called when the Device has requested a state change (turned on or off)
@@ -118,7 +159,7 @@ class TPlinkPlugDevice extends Homey.Device {
             }
             return null;
         } catch (err) {
-            this.error('Error in onCapabilityOnoff:', err);
+            this.error('Error in onCapabilityOnoff: ' + getSafeErrorMessage(err, this.getSettings()));
             throw err;
         }
     }
@@ -135,13 +176,14 @@ class TPlinkPlugDevice extends Homey.Device {
             }
             return null;
         } catch (err) {
-            this.error('Error in onCapabilityLedOnoff:', err);
+            this.error('Error in onCapabilityLedOnoff: ' + getSafeErrorMessage(err, this.getSettings()));
             throw err;
         }
     }
 
     async onSettings({ oldSettings, newSettings, changedKeys }) {
         try {
+            let credentialsChanged = false;
             for (const key of changedKeys) {
                 switch (key) {
                     case 'settingIPAddress':
@@ -160,37 +202,65 @@ class TPlinkPlugDevice extends Homey.Device {
                     case 'dynamicIp':
                         this.log('Dynamic IP setting changed to ' + newSettings.dynamicIp);
                         break;
+                    case 'deviceUsername':
+                    case 'devicePassword':
+                        credentialsChanged = true;
+                        break;
                     default:
                         this.log('Unhandled setting change detected for key:', key);
                         break;
                 }
             }
+
+            if (credentialsChanged) {
+                const settings = { ...this.getSettings(), ...newSettings };
+                const previousClient = this.client;
+                const previousTransport = this.activeTransport;
+                this.activeTransport = getEp10Transport(this.getData(), settings);
+                this.client = createClientFromSettings(this.getData(), settings, this.activeTransport);
+                this.log('TP-Link account credentials updated');
+                try {
+                    await this.reinitializeConnection(settings.settingIPAddress, {
+                        settings,
+                        throwOnFailure: true
+                    });
+                } catch (err) {
+                    this.activeTransport = previousTransport;
+                    this.client = previousClient;
+                    throw err;
+                }
+            }
         } catch (error) {
-            this.error('Failed to handle settings change:', error);
-            throw new Error('Failed to update settings: ' + error.message);
+            this.error('Failed to handle settings change: ' + getSafeErrorMessage(error, newSettings));
+            throw new Error('Failed to update settings: ' + getSafeErrorMessage(error, newSettings));
         }
     }
 
-    async reinitializeConnection(ipAddress) {
+    async reinitializeConnection(ipAddress, {
+        settings = this.getSettings(),
+        throwOnFailure = false
+    } = {}) {
         // Implement the logic to reinitialize the connection
         // For example, update the plug instance
         try {
-            const sysInfo = await client.getSysInfo(ipAddress);
-            this.plug = client.getPlug({ host: ipAddress, sysInfo });
+            const sysInfo = await this.client.getSysInfo(ipAddress);
+            this.plug = this.client.getPlug({ host: ipAddress, sysInfo });
             this.log('Reinitialized connection to', ipAddress);
         } catch (err) {
-            this.error('Error reinitializing connection:', err);
+            const message = getSafeErrorMessage(err, settings);
+            this.error('Error reinitializing connection: ' + message);
+            if (throwOnFailure) throw new Error(message);
         }
     }
 
     async powerOn(device) {
         try {
             this.log('Turning device on ' + device);
-            const sysInfo = await client.getSysInfo(device);
-            this.plug = client.getPlug({ host: device, sysInfo: sysInfo });
+            const sysInfo = await this.client.getSysInfo(device);
+            this.plug = this.client.getPlug({ host: device, sysInfo: sysInfo });
             await this.plug.setPowerState(true);
         } catch (err) {
-            this.log('Error turning device on: ', err.message);
+            this.log('Error turning device on: ' + getSafeErrorMessage(err, this.getSettings()));
 
         }
     }
@@ -199,19 +269,19 @@ class TPlinkPlugDevice extends Homey.Device {
     async powerOff(device) {
         try {
             this.log('Turning device off ' + device);
-            const sysInfo = await client.getSysInfo(device);
-            this.plug = client.getPlug({ host: device, sysInfo: sysInfo });
+            const sysInfo = await this.client.getSysInfo(device);
+            this.plug = this.client.getPlug({ host: device, sysInfo: sysInfo });
             await this.plug.setPowerState(false);
         } catch (err) {
-            this.log('Error turning device off: ', err.message);
+            this.log('Error turning device off: ' + getSafeErrorMessage(err, this.getSettings()));
 
         }
     }
 
     getPower(device) {
-        return client.getSysInfo(device)  // Ensure this function returns a promise
+        return this.client.getSysInfo(device)  // Ensure this function returns a promise
             .then(sysInfo => {
-                this.plug = client.getPlug({ host: device, sysInfo: sysInfo });
+                this.plug = this.client.getPlug({ host: device, sysInfo: sysInfo });
                 return this.plug.getSysInfo();
             })
             .then(sysInfo => {
@@ -224,15 +294,15 @@ class TPlinkPlugDevice extends Homey.Device {
                 }
             })
             .catch(err => {
-                this.log("Caught error in getPower function: " + err.message);
+                this.log("Caught error in getPower function: " + getSafeErrorMessage(err, this.getSettings()));
 
             });
     }
 
     getLed(device) {
-        return client.getSysInfo(device)  // Ensure this function returns a promise
+        return this.client.getSysInfo(device)  // Ensure this function returns a promise
             .then(sysInfo => {
-                this.plug = client.getPlug({ host: device, sysInfo: sysInfo });
+                this.plug = this.client.getPlug({ host: device, sysInfo: sysInfo });
                 return this.plug.getSysInfo();
             })
             .then(sysInfo => {
@@ -245,7 +315,7 @@ class TPlinkPlugDevice extends Homey.Device {
                 }
             })
             .catch(err => {
-                this.log("Caught error in getLed function: " + err.message);
+                this.log("Caught error in getLed function: " + getSafeErrorMessage(err, this.getSettings()));
 
             });
     }
@@ -253,12 +323,12 @@ class TPlinkPlugDevice extends Homey.Device {
     async ledOn(device) {
         try {
             this.log('Turning LED on for device ' + device);
-            const sysInfo = await client.getSysInfo(device);
-            this.plug = client.getPlug({ host: device, sysInfo: sysInfo });
+            const sysInfo = await this.client.getSysInfo(device);
+            this.plug = this.client.getPlug({ host: device, sysInfo: sysInfo });
             await this.plug.setLedState(true);
             await this.setCapabilityValue('ledonoff', true)
         } catch (err) {
-            this.log('Error turning LED on: ', err.message);
+            this.log('Error turning LED on: ' + getSafeErrorMessage(err, this.getSettings()));
 
         }
     }
@@ -267,12 +337,12 @@ class TPlinkPlugDevice extends Homey.Device {
     async ledOff(device) {
         try {
             this.log('Turning LED off for device ' + device);
-            const sysInfo = await client.getSysInfo(device);
-            this.plug = client.getPlug({ host: device, sysInfo: sysInfo });
+            const sysInfo = await this.client.getSysInfo(device);
+            this.plug = this.client.getPlug({ host: device, sysInfo: sysInfo });
             await this.plug.setLedState(false);
             await this.setCapabilityValue('ledonoff', false);
         } catch (err) {
-            this.log('Error turning LED off: ', err.message);
+            this.log('Error turning LED off: ' + getSafeErrorMessage(err, this.getSettings()));
 
         }
     }
@@ -281,8 +351,8 @@ class TPlinkPlugDevice extends Homey.Device {
     async meter_reset(device) {
         this.log('Reset meter ');
         try {
-            const sysInfo = await client.getSysInfo(device);
-            this.plug = client.getPlug({ host: device, sysInfo: sysInfo });
+            const sysInfo = await this.client.getSysInfo(device);
+            this.plug = this.client.getPlug({ host: device, sysInfo: sysInfo });
             // reset meter for counters in Kasa app. Does not actually clear the total counter though...
             // this.plug.emeter.eraseStats(null);
             this.log('Setting totalOffset to oldtotalState: ' + this.oldtotalState);
@@ -291,7 +361,7 @@ class TPlinkPlugDevice extends Homey.Device {
                 totalOffset: this.totalOffset
             }).catch(this.error);
         } catch (err) {
-            this.log('Error resetting meter: ', err.message);
+            this.log('Error resetting meter: ' + getSafeErrorMessage(err, this.getSettings()));
         }
     }
 
@@ -311,8 +381,8 @@ class TPlinkPlugDevice extends Homey.Device {
         this.log("getStatus device: " + device + ", name: " + this.getName());
 
         try {
-            const sysInfo = await client.getSysInfo(device);
-            this.plug = client.getPlug({ host: device, sysInfo });
+            const sysInfo = await this.client.getSysInfo(device);
+            this.plug = this.client.getPlug({ host: device, sysInfo });
 
             const data = await this.plug.getInfo();
 
@@ -323,7 +393,7 @@ class TPlinkPlugDevice extends Homey.Device {
                     await this.setSettings({ deviceId: data.sysInfo.deviceId });
                     this.log("DeviceId added: " + settings["deviceId"]);
                 } catch (error) {
-                    this.log("Error setting deviceId: " + error.message);
+                    this.log("Error setting deviceId: " + getSafeErrorMessage(error, settings));
                 }
             }
 
@@ -349,7 +419,7 @@ class TPlinkPlugDevice extends Homey.Device {
                     }
                     this.oldRelayState = data.sysInfo.relay_state;
                 } catch (error) {
-                    this.log("Error setting capability value: " + error.message);
+                    this.log("Error setting capability value: " + getSafeErrorMessage(error, settings));
                 }
             }
 
@@ -375,13 +445,13 @@ class TPlinkPlugDevice extends Homey.Device {
                         await this.setCapabilityValue('measure_current', data.emeter.realtime.current);
                     }
                 } catch (error) {
-                    this.log("Error updating capability values: " + error.message);
+                    this.log("Error updating capability values: " + getSafeErrorMessage(error, settings));
                 }
             }
 
         } catch (err) {
-            var errRegEx = new RegExp("EHOSTUNREACH", 'g');
-            if (err.message.match(errRegEx)) {
+            var errRegEx = new RegExp("EHOSTUNREACH|ETIMEDOUT|ENETUNREACH|ECONNREFUSED", 'g');
+            if (getSafeErrorMessage(err, settings).match(errRegEx)) {
                 this.unreachableCount += 1;
                 this.log("Device unreachable. Unreachable count: " + this.unreachableCount + " Discover count: " + this.discoverCount + " DynamicIP option: " + settings["dynamicIp"]);
 
@@ -393,7 +463,7 @@ class TPlinkPlugDevice extends Homey.Device {
                     this.discover();
                 }
             }
-            this.log("Caught error in getStatus function: " + err.message);
+            this.log("Caught error in getStatus function: " + getSafeErrorMessage(err, settings));
         }
     }
 
@@ -403,61 +473,106 @@ class TPlinkPlugDevice extends Homey.Device {
             try {
                 await this.getStatus();
             } catch (err) {
-                this.log("Error during polling: " + err.message);
+                this.log("Error during polling: " + getSafeErrorMessage(err, this.getSettings()));
                 // Optionally, handle reconnection or retry logic here
             }
         }, 1000 * interval);
     }
 
 
+    stopActiveDiscovery() {
+        if (this.activeDiscovery !== undefined && this.activeDiscovery !== null) {
+            this.activeDiscovery.finish();
+        }
+    }
+
+    updateInMemoryTransport(transport, settings) {
+        if (
+            !isValidTpLinkTransport(transport) ||
+            isValidTpLinkTransport(this.getData().transport) ||
+            transport === this.activeTransport
+        ) return;
+
+        this.activeTransport = transport;
+        this.client = createClientFromSettings(this.getData(), settings, transport);
+        this.log('Updated in-memory EP10 transport from rediscovery: ' + transport);
+    }
+
     async discover() {
-        let settings = this.getSettings();
-        var discoveryOptions = {
-            deviceTypes: 'plug',
+        this.stopActiveDiscovery();
+
+        const settings = this.getSettings();
+        const discoveryClient = new Client(getTpLinkDiscoveryClientOptions(settings));
+        const discoveryOptions = {
+            deviceTypes: ['plug'],
             discoveryInterval: 10000,
             discoveryTimeout: 5000,
             offlineTolerance: 3
         };
+        const pendingCandidates = new Set();
+        let finished = false;
+        let finishTimer = null;
 
+        const finishDiscovery = () => {
+            if (finished) return;
+            finished = true;
+            if (finishTimer !== null) clearTimeout(finishTimer);
+            discoveryClient.stopDiscovery();
+            discoveryClient.removeAllListeners();
+            if (this.activeDiscovery && this.activeDiscovery.client === discoveryClient) {
+                this.activeDiscovery = null;
+            }
+        };
+
+        const handleDiscoveredPlug = async plug => {
+            if (finished) return;
+
+            const candidateKey = plug.deviceId || plug.host;
+            if (!candidateKey || pendingCandidates.has(candidateKey)) return;
+            pendingCandidates.add(candidateKey);
+
+            try {
+                const sysInfo = await plug.getSysInfo();
+                const model = typeof sysInfo.model === 'string' ? sysInfo.model : plug.model;
+                const deviceId = sysInfo.deviceId || sysInfo.device_id || plug.deviceId;
+                if (
+                    finished ||
+                    !String(model || '').toUpperCase().startsWith(TPlinkModel) ||
+                    !deviceId ||
+                    deviceId !== settings.deviceId
+                ) return;
+
+                const transport = getDiscoveredTransport(plug);
+                await this.setSettings({ settingIPAddress: plug.host });
+                this.updateInMemoryTransport(transport, settings);
+                await this.setAvailable();
+                this.log('Discovered online plug: ' + deviceId);
+                this.log('Resetting unreachable count to 0');
+                this.unreachableCount = 0;
+                this.discoverCount = 0;
+                finishDiscovery();
+            } catch (err) {
+                this.log('Error during EP10 discovery: ' + getSafeErrorMessage(err, settings));
+            } finally {
+                pendingCandidates.delete(candidateKey);
+            }
+        };
+
+        discoveryClient.on('plug-new', handleDiscoveredPlug);
+        discoveryClient.on('plug-online', handleDiscoveredPlug);
+        discoveryClient.on('error', err => {
+            if (!finished) {
+                this.log('EP10 discovery failed: ' + getSafeErrorMessage(err, settings));
+            }
+        });
+
+        this.activeDiscovery = { client: discoveryClient, finish: finishDiscovery };
         try {
-            // As startDiscovery does not return a promise, it does not need await but errors should be handled appropriately
-            const discovery = client.startDiscovery(discoveryOptions);
-
-            // Handle new plug event
-            discovery.on('plug-new', async (plug) => {
-                try {
-                    if (plug.deviceId === settings["deviceId"]) {
-                        await this.setSettings({ settingIPAddress: plug.host });
-                        // Stopping discovery after finding the device, assuming one device setup per call
-                        client.stopDiscovery();
-                        this.log("Discovered online plug: " + plug.deviceId);
-                        this.setAvailable();
-                        this.log("Resetting unreachable count to 0");
-                        this.unreachableCount = 0;
-                        this.discoverCount = 0;
-                    }
-                } catch (err) {
-                    this.log('Error updating settings during discovery: ' + err.message);
-                }
-            });
-
-            // Optionally handle plug-online event if needed
-            discovery.on('plug-online', async (plug) => {
-                try {
-                    if (plug.deviceId === settings["deviceId"]) {
-                        await this.setSettings({ settingIPAddress: plug.host });
-                        // Similar to plug-new, stop discovery once the intended device is online
-                        client.stopDiscovery();
-                        this.log("Discovered online plug: " + plug.deviceId + " is back online");
-                        this.setAvailable();
-                    }
-                } catch (err) {
-                    this.log('Error handling online plug during discovery: ' + err.message);
-                }
-            });
+            discoveryClient.startDiscovery(discoveryOptions);
+            finishTimer = setTimeout(finishDiscovery, discoveryOptions.discoveryTimeout + 25);
         } catch (err) {
-            this.log('Discovery failed: ' + err.message);
-            // Implement retry logic or further error handling as needed
+            this.log('Unable to start EP10 discovery: ' + getSafeErrorMessage(err, settings));
+            finishDiscovery();
         }
     }
 

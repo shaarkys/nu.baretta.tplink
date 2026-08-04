@@ -184,5 +184,8 @@
   },
   "0.2.47": {
     "en": "Fixed HS200 scheduled-off polling"
+  },
+  "0.3.0": {
+    "en": "New authenticated SMART-device support"
   }
 }

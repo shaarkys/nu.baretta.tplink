@@ -15,7 +15,12 @@
                         "totalOffset": "Correction of total power usage",
                         "saveSettings": "Next to select",
                         "discovery": "Searching for new devices, one moment please... Make sure the smart plug is plugged in and online (the LED is solid green). Discovered devices will be listed below :",
-                        "startdiscovery": "Start discovery"
+                        "startdiscovery": "Start discovery",
+                        "tpLinkCredentials": "Optional TP-Link account credentials for authenticated SMART EP10 firmware.",
+                        "tpLinkEmail": "TP-Link account email",
+                        "tpLinkEmailPlaceholder": "name@example.com",
+                        "tpLinkPassword": "TP-Link account password",
+                        "tpLinkPasswordPlaceholder": "TP-Link account password"
                 }
         }
 }

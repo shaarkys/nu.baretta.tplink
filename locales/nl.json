@@ -15,7 +15,12 @@
                   "totalOffset": "Correctie van totaal stroomverbruik",
                   "saveSettings": "Volgende om te selecteren",
                   "discovery": "Zoeken naar nieuwe apparaten, een moment geduld alstublieft... Zorg ervoor dat de slimme stekker is aangesloten en online is (het LED-lampje is continu groen). Ontdekte apparaten worden hieronder vermeld:",
-                  "startdiscovery": "Automatisch zoeken"
+                  "startdiscovery": "Automatisch zoeken",
+                  "tpLinkCredentials": "Optionele inloggegevens voor je TP-Link-account voor geauthenticeerde SMART EP10-firmware.",
+                  "tpLinkEmail": "E-mailadres van TP-Link-account",
+                  "tpLinkEmailPlaceholder": "naam@voorbeeld.nl",
+                  "tpLinkPassword": "Wachtwoord van TP-Link-account",
+                  "tpLinkPasswordPlaceholder": "Wachtwoord van TP-Link-account"
             }
       }
 }

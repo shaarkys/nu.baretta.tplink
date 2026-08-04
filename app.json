@@ -92,7 +92,7 @@
       "EP25"
     ]
   },
-  "version": "0.2.47",
+  "version": "0.3.0",
   "compatibility": ">=5.0.0",
   "author": {
     "name": "Bretislav Kubesa",
@@ -373,6 +373,32 @@
               "hint": {
                 "en": "Enable this option if your TP-Link uses a dynamic IP address. The app will then attempt to re-discover the device when it becomes unreachable.",
                 "nl": "Zet deze optie aan als de TP-Link een dynamisch toegewezen IP adres gebruikt. De app zal dan pogen het apparaat opnieuw te vinden zodra het onbereikbaar wordt."
+              }
+            },
+            {
+              "id": "deviceUsername",
+              "type": "text",
+              "value": "",
+              "label": {
+                "en": "TP-Link account email",
+                "nl": "E-mailadres van TP-Link-account"
+              },
+              "hint": {
+                "en": "Optional TP-Link account email for authenticated SMART EP10 firmware.",
+                "nl": "Optioneel e-mailadres van het TP-Link-account voor geauthenticeerde SMART EP10-firmware."
+              }
+            },
+            {
+              "id": "devicePassword",
+              "type": "password",
+              "value": "",
+              "label": {
+                "en": "TP-Link account password",
+                "nl": "Wachtwoord van TP-Link-account"
+              },
+              "hint": {
+                "en": "Optional TP-Link account password for authenticated SMART EP10 firmware.",
+                "nl": "Optioneel wachtwoord van het TP-Link-account voor geauthenticeerde SMART EP10-firmware."
               }
             }
           ]

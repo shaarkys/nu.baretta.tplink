@@ -130,6 +130,24 @@
   "dependencies": {
     "net": "*"
   },
+  "api": {
+    "getCredentialStatus": {
+      "method": "GET",
+      "path": "/credentials/status"
+    },
+    "saveCredentials": {
+      "method": "POST",
+      "path": "/credentials/save"
+    },
+    "clearCredentials": {
+      "method": "POST",
+      "path": "/credentials/clear"
+    },
+    "adoptLegacyCredentials": {
+      "method": "POST",
+      "path": "/credentials/adopt"
+    }
+  },
   "capabilities": {
     "ledonoff": {
       "type": "boolean",
@@ -384,8 +402,8 @@
                 "nl": "E-mailadres van TP-Link-account"
               },
               "hint": {
-                "en": "Optional TP-Link account email for authenticated SMART EP10 firmware.",
-                "nl": "Optioneel e-mailadres van het TP-Link-account voor geauthenticeerde SMART EP10-firmware."
+                "en": "Leave both account fields blank to use the app-wide account for authenticated firmware. A confirmed TCP EP10 can remain blank; enter both fields for a local override.",
+                "nl": "Laat beide accountvelden leeg om het app-brede account voor geauthenticeerde firmware te gebruiken. Een bevestigde TCP EP10 mag leeg blijven; vul beide velden in voor een lokale overschrijving."
               }
             },
             {
@@ -397,8 +415,8 @@
                 "nl": "Wachtwoord van TP-Link-account"
               },
               "hint": {
-                "en": "Optional TP-Link account password for authenticated SMART EP10 firmware.",
-                "nl": "Optioneel wachtwoord van het TP-Link-account voor geauthenticeerde SMART EP10-firmware."
+                "en": "Leave both account fields blank to use the app-wide account for authenticated firmware. A confirmed TCP EP10 can remain blank; enter both fields for a local override.",
+                "nl": "Laat beide accountvelden leeg om het app-brede account voor geauthenticeerde firmware te gebruiken. Een bevestigde TCP EP10 mag leeg blijven; vul beide velden in voor een lokale overschrijving."
               }
             }
           ]
@@ -1695,8 +1713,8 @@
                 "nl": "Lokale gebruikersnaam"
               },
               "hint": {
-                "en": "Optional username for authenticated SMART devices such as KS225.",
-                "nl": "Optionele gebruikersnaam voor geauthenticeerde SMART apparaten zoals de KS225."
+                "en": "Leave both account fields blank to use the app-wide TP-Link account. Enter a complete local username and password to override it for this device.",
+                "nl": "Laat beide accountvelden leeg om het app-brede TP-Link-account te gebruiken. Vul een volledige lokale gebruikersnaam en wachtwoord in om dit apparaat te overschrijven."
               }
             },
             {
@@ -1708,8 +1726,8 @@
                 "nl": "Lokaal wachtwoord"
               },
               "hint": {
-                "en": "Optional password for authenticated SMART devices such as KS225.",
-                "nl": "Optioneel wachtwoord voor geauthenticeerde SMART apparaten zoals de KS225."
+                "en": "Leave both account fields blank to use the app-wide TP-Link account. Enter a complete local username and password to override it for this device.",
+                "nl": "Laat beide accountvelden leeg om het app-brede TP-Link-account te gebruiken. Vul een volledige lokale gebruikersnaam en wachtwoord in om dit apparaat te overschrijven."
               }
             }
           ]
@@ -1832,8 +1850,8 @@
                 "nl": "Lokale gebruikersnaam"
               },
               "hint": {
-                "en": "Optional username for authenticated SMART devices such as the S500D.",
-                "nl": "Optionele gebruikersnaam voor geauthenticeerde SMART apparaten zoals de S500D."
+                "en": "Leave both account fields blank to use the app-wide TP-Link account. Enter a complete local username and password to override it for this device.",
+                "nl": "Laat beide accountvelden leeg om het app-brede TP-Link-account te gebruiken. Vul een volledige lokale gebruikersnaam en wachtwoord in om dit apparaat te overschrijven."
               }
             },
             {
@@ -1845,8 +1863,8 @@
                 "nl": "Lokaal wachtwoord"
               },
               "hint": {
-                "en": "Optional password for authenticated SMART devices such as the S500D.",
-                "nl": "Optioneel wachtwoord voor geauthenticeerde SMART apparaten zoals de S500D."
+                "en": "Leave both account fields blank to use the app-wide TP-Link account. Enter a complete local username and password to override it for this device.",
+                "nl": "Laat beide accountvelden leeg om het app-brede TP-Link-account te gebruiken. Vul een volledige lokale gebruikersnaam en wachtwoord in om dit apparaat te overschrijven."
               }
             }
           ]
@@ -2647,8 +2665,8 @@
                 "nl": "Lokale gebruikersnaam"
               },
               "hint": {
-                "en": "Optional username for authenticated KS240 devices.",
-                "nl": "Optionele gebruikersnaam voor geauthenticeerde KS240 apparaten."
+                "en": "Leave both account fields blank to use the app-wide TP-Link account. Enter a complete local username and password to override it for this device.",
+                "nl": "Laat beide accountvelden leeg om het app-brede TP-Link-account te gebruiken. Vul een volledige lokale gebruikersnaam en wachtwoord in om dit apparaat te overschrijven."
               }
             },
             {
@@ -2660,8 +2678,8 @@
                 "nl": "Lokaal wachtwoord"
               },
               "hint": {
-                "en": "Optional password for authenticated KS240 devices.",
-                "nl": "Optioneel wachtwoord voor geauthenticeerde KS240 apparaten."
+                "en": "Leave both account fields blank to use the app-wide TP-Link account. Enter a complete local username and password to override it for this device.",
+                "nl": "Laat beide accountvelden leeg om het app-brede TP-Link-account te gebruiken. Vul een volledige lokale gebruikersnaam en wachtwoord in om dit apparaat te overschrijven."
               }
             }
           ]

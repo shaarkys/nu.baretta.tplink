@@ -175,9 +175,10 @@ test('EP10 save revalidates a selected device with the exact credentials to pers
       settingIPAddress: '192.0.2.10',
       dynamicIp: false,
       totalOffset: 0,
-      deviceUsername: 'account@example.com',
-      devicePassword: ' password with spaces ',
       deviceId: 'selected-device-id',
+      credentialSource: 'global',
+      deviceUsername: '',
+      devicePassword: '',
     });
     assert.deepEqual(session.emitted, [{ name: 'continue', value: null }]);
   });
@@ -218,6 +219,76 @@ test('EP10 save rejects a selected device when targeted validation finds a diffe
       /no longer matches the device selected during discovery/,
     );
     assert.deepEqual(session.emitted, []);
+  });
+});
+
+test('EP10 TCP pairing does not persist or seed unused account credentials', { concurrency: false }, async () => {
+  const plug = {
+    host: '192.0.2.13',
+    model: 'EP10',
+    deviceId: 'tcp-device-id',
+    defaultSendOptions: { transport: 'tcp' },
+    getSysInfo: async () => ({ model: 'EP10', deviceId: 'tcp-device-id' }),
+  };
+  const { Client, instances } = createClientStub(client => client.emit('plug-new', plug));
+  const Driver = loadFreshModule('../drivers/ep10/driver.js', {
+    homey: createHomeyStub(),
+    'tplink-smarthome-api': { Client },
+  });
+  const driver = new Driver();
+  const session = createPairSession();
+  driver.log = () => {};
+
+  await withFakeTimers(async timers => {
+    await driver.onPair(session);
+    const pairing = session.handlers.get('get_devices')([{
+      ip: '192.0.2.13',
+      deviceUsername: 'unused@example.com',
+      devicePassword: 'unused password',
+    }]);
+
+    timers[0].callback();
+    const devices = await pairing;
+    assert.equal(instances.length, 1);
+    assert.equal(devices[0].data.transport, 'tcp');
+    assert.deepEqual(devices[0].settings, {
+      settingIPAddress: '192.0.2.13',
+      dynamicIp: false,
+      totalOffset: 0,
+      deviceId: 'tcp-device-id',
+      deviceUsername: '',
+      devicePassword: '',
+    });
+  });
+});
+
+test('EP10 authenticated discovery requires a complete account pair before returning a device', { concurrency: false }, async () => {
+  let sysInfoCalls = 0;
+  const plug = {
+    host: '192.0.2.14',
+    model: 'EP10',
+    deviceId: 'authenticated-device-id',
+    defaultSendOptions: { transport: 'klap' },
+    getSysInfo: async () => {
+      sysInfoCalls += 1;
+      return { model: 'EP10', deviceId: 'authenticated-device-id' };
+    },
+  };
+  const { Client } = createClientStub(client => client.emit('plug-new', plug));
+  const Driver = loadFreshModule('../drivers/ep10/driver.js', {
+    homey: createHomeyStub(),
+    'tplink-smarthome-api': { Client },
+  });
+  const driver = new Driver();
+  const session = createPairSession();
+  driver.log = () => {};
+
+  await withFakeTimers(async timers => {
+    await driver.onPair(session);
+    const pairing = session.handlers.get('get_devices')([{ ip: '192.0.2.14' }]);
+    timers[0].callback();
+    await assert.rejects(pairing, /uses authenticated firmware/);
+    assert.equal(sysInfoCalls, 0);
   });
 });
 

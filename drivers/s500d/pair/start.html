@@ -1,173 +1,131 @@
 <script>
-	let discoveredDevices = []; // Global variable for discovered devices
+  let discoveredDevices = [];
+  let globalCredentialsConfigured = false;
 
-	Homey.setTitle(__('pair.start.title'));
+  Homey.setTitle(__('pair.start.title'));
 
-	Homey.on('error', function (errortype, callback) {
-		let errorMessage;
+  function setLoading(isLoading) {
+    $('#startdiscovery').toggleClass('is-loading', isLoading);
+    $('#saveSettings').toggleClass('is-loading', isLoading);
+  }
 
-		switch (errortype) {
-			case 'error':
-				errorMessage = __('pair.start.error');
-				break;
-			case 'nosettings':
-				errorMessage = __('pair.start.nosettings');
-				break;
-			case 'session_not_found':
-				errorMessage = __('pair.start.session_not_found');
-				break;
-			default:
-				errorMessage = __('pair.start.unknown_error');
-				break;
-		}
+  function getCredentialFields() {
+    return {
+      deviceUsername: document.getElementById('deviceUsername').value.trim(),
+      devicePassword: document.getElementById('devicePassword').value
+    };
+  }
 
-		if (errorMessage) {
-			Homey.alert(errorMessage, 'error');
-			Homey.done();
-		}
-	});
+  function validateCredentialFields() {
+    const credentials = getCredentialFields();
+    const hasInput = credentials.deviceUsername.length > 0 || credentials.devicePassword.length > 0;
+    if (hasInput && (!credentials.deviceUsername || !credentials.devicePassword)) {
+      Homey.alert(__('pair.start.credentialsComplete'), 'error');
+      return null;
+    }
+    if (!globalCredentialsConfigured && !hasInput) {
+      Homey.alert(__('pair.start.credentialsRequired'), 'error');
+      return null;
+    }
+    return credentials;
+  }
 
-	Homey.on('continue', function (success, callback) {
-		Homey.showView('list_devices');
-	});
+  function showPairingError(error) {
+    setLoading(false);
+    Homey.alert(error && error.message ? error.message : __('pair.start.error'), 'error');
+  }
 
-	$('#startdiscovery').on('click', function () {
-		$(this).addClass('is-loading');
-		$('#saveSettings').addClass('is-loading');
-		document.getElementById('discovery').style.display = 'block';
-		Homey.emit('discover', getCredentialFields(), function (err, result) {
-			console.log("Discovery results" + 'result');
-		});
-	});
+  function updateCredentialStatus(status) {
+    globalCredentialsConfigured = Boolean(status && status.configured);
+    const hint = status && status.usernameHint ? status.usernameHint : '';
+    document.getElementById('credentialStatus').textContent = globalCredentialsConfigured
+      ? __('pair.start.globalCredentials', { username: hint })
+      : __('pair.start.credentialsRequired');
+  }
 
-	Homey.on('discovered_devices', function (devices) {
-		$('#startdiscovery').removeClass('is-loading');
-		$('#saveSettings').removeClass('is-loading');
-		discoveredDevices = devices;
-		var list = document.getElementById('deviceList');
-		list.innerHTML = ''; // Clear current list
+  $('#startdiscovery').on('click', function () {
+    const credentials = validateCredentialFields();
+    if (!credentials) return;
+    setLoading(true);
+    document.getElementById('discovery').style.display = 'block';
+    discoveredDevices = [];
+    Homey.emit('discover', credentials).catch(showPairingError);
+  });
 
-		discoveredDevices.forEach(device => {
-			var item = document.createElement('div');
-			item.textContent = device.name + ' (' + device.ip + ')';
-			list.appendChild(item);
-		});
+  Homey.on('continue', function () {
+    Homey.showView('list_devices');
+  });
 
-		document.getElementById('manualEntry').style.display = 'none';
-	});
+  Homey.on('discovered_devices', function (devices) {
+    setLoading(false);
+    discoveredDevices = devices;
+    const list = document.getElementById('deviceList');
+    list.innerHTML = '';
+    discoveredDevices.forEach(device => {
+      const item = document.createElement('div');
+      item.textContent = device.name + ' (' + device.ip + ')';
+      list.appendChild(item);
+    });
+    document.getElementById('manualEntry').style.display = 'none';
+  });
 
-	Homey.on('discovery_failed', function (data) {
-		document.getElementById('discovery').style.display = 'none';
-		$('#startdiscovery').removeClass('is-loading');
-		$('#saveSettings').removeClass('is-loading');
-		Homey.alert(__('pair.start.nodevice'), 'error');
-	}
-	);
+  Homey.on('discovery_failed', function () {
+    setLoading(false);
+    document.getElementById('discovery').style.display = 'none';
+    Homey.alert(__('pair.start.nodevice'), 'error');
+  });
 
-	function getCredentialFields() {
-		return {
-			deviceUsername: document.getElementById('deviceUsername').value.trim(),
-			devicePassword: document.getElementById('devicePassword').value
-		};
-	}
+  function saveSettings() {
+    const credentials = validateCredentialFields();
+    if (!credentials) return;
+    setLoading(true);
 
+    if (discoveredDevices.length > 0) {
+      Homey.emit('get_devices', discoveredDevices.map(device => ({
+        ...device,
+        ...credentials
+      }))).catch(showPairingError);
+      return;
+    }
 
-	function saveSettings() {
-		const credentials = getCredentialFields();
-		// Check if manual entry fields are hidden (i.e., devices have been discovered)
-		if (discoveredDevices.length > 0) {
-			const devicesWithCredentials = discoveredDevices.map(device => ({
-				...device,
-				...credentials
-			}));
-			Homey.emit('get_devices', devicesWithCredentials);
-		} else {
-			// variables
-			var inputIPAddress = document.getElementById('ipAddress').value;
-			var inputDeviceName = document.getElementById('deviceName').value;
-
-			// If required values are filled in
-			// create Regular Expression that validates for IPv4 addresses, then do the actual test on the input.
-			var Ipv4RegEx = new RegExp('^(([01]?\\d\\d?|2[0-4]\\d|25[0-5]).){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$');
-			var IPInputOK = Ipv4RegEx.test(inputIPAddress);
-
-			if (!IPInputOK) {
-				Homey.alert(__('pair.start.invalidIP'), 'error');
-				return;
-			}
-
-			if (inputIPAddress != '') {
-
-				// Build data array
-				var data = [{
-					ip: inputIPAddress,
-					name: inputDeviceName,
-					...credentials
-				}];
-
-				// Continue to back-end, pass along data
-				Homey.emit('get_devices', data);
-
-			} else {
-
-				// Give error, required values
-				Homey.alert(__('pair.start.required'), 'error');
-				// Homey.done() closes the pairing window
-				Homey.done();
-
-			}
-
-		}
-
-	}
-
+    const ip = document.getElementById('ipAddress').value.trim();
+    const name = document.getElementById('deviceName').value.trim();
+    const ipv4 = /^(([01]?\d\d?|2[0-4]\d|25[0-5]).){3}([01]?\d\d?|2[0-4]\d|25[0-5])$/;
+    if (!ipv4.test(ip)) {
+      setLoading(false);
+      Homey.alert(__('pair.start.invalidIP'), 'error');
+      return;
+    }
+    Homey.emit('get_devices', [{ ip, name, ...credentials }]).catch(showPairingError);
+  }
 </script>
 
 <div id="discovery" style="display: none">
-	<p data-i18n="pair.start.discovery"></p>
-	<div id="deviceList">
-		<!-- Discovered devices will be listed here -->
-	</div>
+  <p data-i18n="pair.start.discovery"></p>
+  <div id="deviceList"></div>
 </div>
 
 <div id="manualEntry">
-	<p><span data-i18n="pair.start.intro"></span></p>
-	<p>
-		<center>
-			<button class="homey-button-small" id="startdiscovery"><span
-					data-i18n="pair.start.startdiscovery"></span></button>
-		</center>
-	</p>
-
-	<table class="pairSettings">
-		<tr>
-			<td style="width:100px;"><span data-i18n="pair.start.ipAddress"></span></td>
-			<td><input id="ipAddress" type="text" value="" placeholder="192.168.1.10" /></td>
-		</tr>
-		<tr>
-			<td style="width:100px;"><span data-i18n="pair.start.deviceName"></span></td>
-			<td><input id="deviceName" type="text" value="" placeholder="TP-Link Device" /></td>
-		</tr>
-	</table>
+  <p><span data-i18n="pair.start.intro"></span></p>
+  <p><button class="homey-button-small" id="startdiscovery"><span data-i18n="pair.start.startdiscovery"></span></button></p>
+  <table class="pairSettings">
+    <tr><td style="width:100px;"><span data-i18n="pair.start.ipAddress"></span></td><td><input id="ipAddress" type="text" placeholder="192.168.1.10" /></td></tr>
+    <tr><td style="width:100px;"><span data-i18n="pair.start.deviceName"></span></td><td><input id="deviceName" type="text" placeholder="TP-Link Device" /></td></tr>
+  </table>
 </div>
 
 <div id="authEntry">
-	<p>Optional TP-Link account credentials for authenticated SMART devices.</p>
-	<table class="pairSettings">
-		<tr>
-			<td style="width:100px;">Username</td>
-			<td><input id="deviceUsername" type="text" value="" placeholder="name@example.com" /></td>
-		</tr>
-		<tr>
-			<td style="width:100px;">Password</td>
-			<td><input id="devicePassword" type="password" value="" placeholder="TP-Link account password" /></td>
-		</tr>
-	</table>
+  <p id="credentialStatus" data-i18n="pair.start.credentialsRequired"></p>
+  <p data-i18n="pair.start.credentialsOverrideHint"></p>
+  <table class="pairSettings">
+    <tr><td style="width:100px;"><span data-i18n="pair.start.tpLinkEmail"></span></td><td><input id="deviceUsername" type="text" data-i18n="[placeholder]pair.start.tpLinkEmailPlaceholder" /></td></tr>
+    <tr><td style="width:100px;"><span data-i18n="pair.start.tpLinkPassword"></span></td><td><input id="devicePassword" type="password" data-i18n="[placeholder]pair.start.tpLinkPasswordPlaceholder" /></td></tr>
+  </table>
 </div>
 
-<fieldset>
-	<center>
-		<button class="homey-button-primary-full" id="saveSettings" onclick="saveSettings()"><span
-				data-i18n="pair.start.saveSettings"></span></button>
-	</center>
-</fieldset>
+<fieldset><button class="homey-button-primary-full" id="saveSettings" onclick="saveSettings()"><span data-i18n="pair.start.saveSettings"></span></button></fieldset>
+<script>
+  Homey.emit('get_credential_status')
+    .then(updateCredentialStatus)
+    .catch(() => updateCredentialStatus({ configured: false }));
+</script>

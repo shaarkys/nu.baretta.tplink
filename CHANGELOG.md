@@ -8,7 +8,9 @@
 - Added KS225 support using the KLAP transport, including on/off, dimming, and LED control.
 - Added S500D support using the AES transport, including on/off, dimming, and LED control.
 - Re-enabled KS240 support using the AES transport. Its fan and light channels are paired as separate Homey devices and retain their parent/child identity.
-- Added optional TP-Link account credentials to pairing and device settings for KS225, S500D, and KS240. Password fields are masked, credentials are kept with the paired device, and passwords are not written to application logs.
+- Added app-wide TP-Link account credentials for authenticated SMART devices. New KS225, S500D, KS240, and authenticated EP10 devices can use one default account without copying its password to each paired device; different-account overrides remain available per device.
+- Added private Homey Pro Settings controls to validate and save the default account, report only secret-safe status, explicitly adopt matching legacy local pairs, and refresh only devices that use the global source.
+- Pairing now revalidates the selected physical target before saving. TCP EP10 pairing remains credential-free, while authenticated KLAP/AES EP10 pairing requires a complete account pair.
 - Updated discovery for authenticated devices to use TP-Link TDP v2 while retaining legacy UDP discovery for existing Kasa devices.
 - Pinned `tplink-smarthome-api` to the exact reviewed API revision used by this app, preventing future API changes from being installed unexpectedly.
 

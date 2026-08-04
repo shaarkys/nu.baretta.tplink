@@ -20,7 +20,36 @@
                   "tpLinkEmail": "E-mailadres van TP-Link-account",
                   "tpLinkEmailPlaceholder": "naam@voorbeeld.nl",
                   "tpLinkPassword": "Wachtwoord van TP-Link-account",
-                  "tpLinkPasswordPlaceholder": "Wachtwoord van TP-Link-account"
+                  "tpLinkPasswordPlaceholder": "Wachtwoord van TP-Link-account",
+                  "credentialsRequired": "Vul volledige TP-Link-accountgegevens in om dit geauthenticeerde apparaat te koppelen.",
+                  "credentialsComplete": "Vul zowel de gebruikersnaam als het wachtwoord van het TP-Link-account in, of wis beide velden om het globale account te gebruiken.",
+                  "credentialsOverrideHint": "Laat beide velden leeg om het ingestelde globale account te gebruiken. Vul een ander volledig account in voor een apparaatspecifieke overschrijving.",
+                  "globalCredentials": "Het ingestelde TP-Link-account wordt gebruikt ({{username}}).",
+                  "ep10CredentialsOptional": "TP-Link-accountgegevens zijn optioneel voor TCP EP10-firmware, maar vereist als de geselecteerde EP10 geauthenticeerde KLAP- of AES-firmware gebruikt.",
+                  "ep10CredentialsRequired": "Deze EP10 gebruikt geauthenticeerde firmware. Vul volledige TP-Link-accountgegevens in en probeer het opnieuw."
+            }
+      },
+      "settings": {
+            "credentials": {
+                  "title": "TP-Link-accountgegevens",
+                  "subtitle": "Gebruik één standaardaccount voor geauthenticeerde TP-Link SMART-apparaten. Indien nodig kan een apparaat een eigen accountoverschrijving behouden.",
+                  "legend": "Standaardaccount",
+                  "username": "E-mailadres van TP-Link-account",
+                  "password": "Wachtwoord van TP-Link-account",
+                  "replaceHint": "Het opgeslagen wachtwoord wordt om veiligheidsredenen nooit getoond. Vul beide velden in om het te vervangen.",
+                  "save": "Standaardaccount valideren en opslaan",
+                  "clear": "Standaardaccount wissen",
+                  "clearConfirm": "Standaard TP-Link-account wissen? Apparaten die de globale bron gebruiken hebben dan geen gegevens meer totdat je een nieuw standaardaccount opslaat of een overschrijving instelt.",
+                  "configured": "Een standaard TP-Link-account is ingesteld voor {{username}}.",
+                  "notConfigured": "Er is geen standaard TP-Link-account ingesteld.",
+                  "deviceSummary": "Apparaten: {{global}} globaal, {{override}} overschrijving, {{legacy}} verouderd, {{unavailable}} zonder bruikbare gegevens.",
+                  "saved": "Standaard TP-Link-account opgeslagen.",
+                  "cleared": "Standaard TP-Link-account gewist.",
+                  "legacyLegend": "Verouderde apparaatgegevens",
+                  "legacyHint": "Neem alleen verouderde apparaten over waarvan de volledige lokale gegevens exact overeenkomen met de huidige standaard. Afwijkende lokale accounts blijven ongewijzigd.",
+                  "adopt": "Overeenkomende verouderde apparaten overnemen",
+                  "adopted": "{{count}} overeenkomend(e) verouderd(e) apparaat/apparaten overgenomen.",
+                  "error": "TP-Link-accountgegevens kunnen niet worden bijgewerkt."
             }
       }
 }

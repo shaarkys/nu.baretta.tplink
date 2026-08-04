@@ -8,7 +8,7 @@ The app supports automatic LAN discovery, manual-IP pairing, recovery after an I
 
 - Homey Pro running Homey software 5.0.0 or newer.
 - A supported TP-Link device reachable from Homey on the local network.
-- TP-Link account credentials for authenticated SMART models such as KS225, S500D, and KS240. These credentials authenticate the encrypted local connection; they are stored in masked device settings and are not written to application logs.
+- TP-Link account credentials for authenticated SMART models such as KS225, S500D, and KS240. Configure a default account once in the app Settings page; it authenticates encrypted local connections and is never written to application logs. A device can retain a separate Advanced Settings override for a different account.
 - Third-Party Compatibility enabled in the Kasa app when required by a legacy Kasa device or firmware version.
 
 ## Supported devices
@@ -36,7 +36,9 @@ Newer TP-Link devices no longer accept the original unencrypted Kasa protocol. T
 - S500D using the AES transport.
 - KS240 using the AES transport, including separate fan and light child devices.
 
-Enter the same TP-Link account email address and password used to provision the device when pairing. Existing devices from these families may require the credentials to be added in their Advanced Settings after updating the app.
+Configure the default TP-Link account once from the app Settings page. New KS225, S500D, and KS240 devices use that global source without copying its password into every paired device. If no default exists, the first successfully authenticated pairing can create it only after the selected physical device has accepted the credentials.
+
+For a second TP-Link account, enter a different complete account pair during pairing or in that device's Advanced Settings. This creates a device-only override. Clearing both local credential fields explicitly returns the device to the global source. Existing devices without a source marker retain a complete legacy local pair before falling back to a complete global pair; use the Settings page's adoption action to convert matching legacy copies deliberately.
 
 This support has passed API fixtures, automated tests, dependency checks, and Homey package validation. Physical testing across the different hardware and firmware revisions still depends on feedback from device owners, so these drivers should be treated as community-tested until more real-device results are available.
 
@@ -46,8 +48,10 @@ This support has passed API fixtures, automated tests, dependency checks, and Ho
 2. In Homey, add a device and select the driver matching the exact model.
 3. Try automatic discovery first.
 4. If discovery is blocked by a VLAN, Wi-Fi isolation, firewall, or router configuration, enter the device IP address manually.
-5. For KS225, S500D, or KS240, provide the TP-Link account credentials during pairing.
+5. For KS225, S500D, or KS240, use the configured default TP-Link account or provide a complete account pair. A different complete pair becomes a device-only override. Pairing validates the selected physical target before it is saved.
 6. Select all discovered devices or channels that you want to add.
+
+EP10 devices that use the original TCP transport can pair without credentials. Authenticated KLAP or AES EP10 firmware requires a complete account pair; a TCP pairing never stores or creates a global account from unused credentials.
 
 Reserving an IP address in the router's DHCP configuration is recommended. If that is not possible, enable the dynamic-IP option in the device settings so the app can attempt rediscovery when the address changes.
 
@@ -73,7 +77,7 @@ If a device stops responding after an update, do not remove it immediately becau
 1. Confirm that the device still works in the Kasa app and is online on the same local network as Homey.
 2. For a legacy Kasa device, verify that Third-Party Compatibility is still enabled in the Kasa app.
 3. Check the stored IP address and try manual-IP pairing or the dynamic-IP option when discovery cannot reach the device.
-4. For KS225, S500D, or KS240, verify the TP-Link credentials in the device's Advanced Settings.
+4. For KS225, S500D, KS240, or authenticated EP10 firmware, verify the default account in the app Settings page. Check a device's Advanced Settings only when it intentionally uses a different-account override or an unadopted legacy pair.
 5. Restart the TP-Link KASA LAN app once, reproduce the problem, and create a Homey app diagnostic report as soon as possible.
 
 When reporting a problem, include the diagnostic-report ID, exact TP-Link model, hardware and firmware version, Homey model and firmware version, app version, whether the device was newly paired or already installed, the pairing method, the failed action, and the approximate time of the failure.

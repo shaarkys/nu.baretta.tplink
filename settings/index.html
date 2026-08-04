@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script
+      type="text/javascript"
+      src="/homey.js"
+      data-origin="settings"
+    ></script>
+  </head>
+  <body>
+    <header class="homey-header">
+      <h1 class="homey-title" data-i18n="settings.credentials.title"></h1>
+      <p class="homey-subtitle" data-i18n="settings.credentials.subtitle"></p>
+    </header>
+
+    <fieldset class="homey-form-fieldset">
+      <legend class="homey-form-legend" data-i18n="settings.credentials.legend"></legend>
+      <p id="credential-status" aria-live="polite"></p>
+
+      <div class="homey-form-group">
+        <label class="homey-form-label" for="username" data-i18n="settings.credentials.username"></label>
+        <input class="homey-form-input" id="username" type="text" autocomplete="username" />
+      </div>
+      <div class="homey-form-group">
+        <label class="homey-form-label" for="password" data-i18n="settings.credentials.password"></label>
+        <input class="homey-form-input" id="password" type="password" autocomplete="current-password" />
+      </div>
+      <p class="homey-text-small" data-i18n="settings.credentials.replaceHint"></p>
+
+      <button class="homey-button-primary-full" id="save" type="button" data-i18n="settings.credentials.save"></button>
+      <button class="homey-button-danger-full" id="clear" type="button" data-i18n="settings.credentials.clear"></button>
+    </fieldset>
+
+    <fieldset class="homey-form-fieldset">
+      <legend class="homey-form-legend" data-i18n="settings.credentials.legacyLegend"></legend>
+      <p data-i18n="settings.credentials.legacyHint"></p>
+      <button class="homey-button-secondary-full" id="adopt" type="button" data-i18n="settings.credentials.adopt"></button>
+    </fieldset>
+
+    <script type="text/javascript">
+      function credentialInputError(username, password) {
+        if (!username || !password) {
+          return 'Enter both the TP-Link account username and password.';
+        }
+        if (username.length > 254 || password.length > 1024) {
+          return 'The TP-Link account credentials are too long.';
+        }
+        if (/[\u0000-\u001F\u007F]/.test(username) || /[\u0000-\u001F\u007F]/.test(password)) {
+          return 'The TP-Link account credentials contain unsupported characters.';
+        }
+        return null;
+      }
+
+      function callApi(Homey, method, path, body) {
+        return new Promise(function(resolve, reject) {
+          if (method === 'GET') {
+            Homey.api(method, path, function(error, result) {
+              if (error) return reject(error);
+              resolve(result);
+            });
+            return;
+          }
+          Homey.api(method, path, body, function(error, result) {
+            if (error) return reject(error);
+            resolve(result);
+          });
+        });
+      }
+
+      function getErrorMessage(Homey, error) {
+        if (error && error.message) return error.message;
+        if (typeof error === 'string') return error;
+        return Homey.__('settings.credentials.error');
+      }
+
+      window.onHomeyReady = function onHomeyReady(Homey) {
+        Homey.ready();
+
+        var statusElement = document.getElementById('credential-status');
+        var usernameElement = document.getElementById('username');
+        var passwordElement = document.getElementById('password');
+        var saveElement = document.getElementById('save');
+        var clearElement = document.getElementById('clear');
+        var adoptElement = document.getElementById('adopt');
+
+        function setLoading(isLoading) {
+          [saveElement, clearElement, adoptElement].forEach(function(element) {
+            element.disabled = isLoading;
+            element.classList.toggle('is-loading', isLoading);
+          });
+        }
+
+        function renderStatus(status, extraMessage) {
+          if (!status || !status.configured) {
+            statusElement.textContent = extraMessage || Homey.__('settings.credentials.notConfigured');
+            return;
+          }
+          var devices = status.devices || {};
+          statusElement.textContent = (extraMessage || Homey.__('settings.credentials.configured', {
+            username: status.usernameHint,
+          })) + ' ' + Homey.__('settings.credentials.deviceSummary', {
+            global: devices.global || 0,
+            override: devices.override || 0,
+            legacy: devices.legacy || 0,
+            unavailable: devices.unavailable || 0,
+          });
+        }
+
+        async function refreshStatus(extraMessage) {
+          var status = await callApi(Homey, 'GET', '/credentials/status');
+          renderStatus(status, extraMessage);
+          return status;
+        }
+
+        saveElement.addEventListener('click', async function() {
+          var username = usernameElement.value.trim();
+          var password = passwordElement.value;
+          var inputError = credentialInputError(username, password);
+          if (inputError) {
+            Homey.alert(inputError, 'error');
+            return;
+          }
+
+          setLoading(true);
+          try {
+            var result = await callApi(Homey, 'POST', '/credentials/save', {
+              username: username,
+              password: password,
+            });
+            passwordElement.value = '';
+            usernameElement.value = '';
+            var validation = result.validation || {};
+            renderStatus(result.status, validation.reason || Homey.__('settings.credentials.saved'));
+          } catch (error) {
+            Homey.alert(getErrorMessage(Homey, error), 'error');
+          } finally {
+            setLoading(false);
+          }
+        });
+
+        clearElement.addEventListener('click', async function() {
+          if (!window.confirm(Homey.__('settings.credentials.clearConfirm'))) return;
+          setLoading(true);
+          try {
+            var result = await callApi(Homey, 'POST', '/credentials/clear', {});
+            passwordElement.value = '';
+            usernameElement.value = '';
+            renderStatus(result.status, Homey.__('settings.credentials.cleared'));
+          } catch (error) {
+            Homey.alert(getErrorMessage(Homey, error), 'error');
+          } finally {
+            setLoading(false);
+          }
+        });
+
+        adoptElement.addEventListener('click', async function() {
+          setLoading(true);
+          try {
+            var result = await callApi(Homey, 'POST', '/credentials/adopt', {});
+            renderStatus(result.status, Homey.__('settings.credentials.adopted', {
+              count: (result.adopted || []).length,
+            }));
+          } catch (error) {
+            Homey.alert(getErrorMessage(Homey, error), 'error');
+          } finally {
+            setLoading(false);
+          }
+        });
+
+        refreshStatus().catch(function(error) {
+          statusElement.textContent = getErrorMessage(Homey, error);
+        });
+      };
+    </script>
+  </body>
+</html>

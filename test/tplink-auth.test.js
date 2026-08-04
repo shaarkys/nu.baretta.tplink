@@ -96,6 +96,47 @@ test('EP10 keeps pre-change devices on TCP until a complete credential pair exis
   );
 });
 
+test('an unmarked EP10 stays on TCP when global credentials are added', () => {
+  const globalCredentials = {
+    username: 'account@example.com',
+    password: 'password',
+  };
+
+  assert.deepEqual(
+    getEp10ClientOptions({ id: 'old-device' }, {}, globalCredentials),
+    { defaultSendOptions: { transport: 'tcp' } },
+  );
+  assert.deepEqual(
+    getEp10ClientOptions(
+      { id: 'old-device' },
+      { credentialSource: 'global' },
+      globalCredentials,
+    ),
+    {
+      defaultSendOptions: { transport: 'klap' },
+      credentials: globalCredentials,
+    },
+  );
+  assert.deepEqual(
+    getEp10ClientOptions(
+      { id: 'old-device' },
+      {
+        credentialSource: 'override',
+        deviceUsername: 'local@example.com',
+        devicePassword: 'local password',
+      },
+      globalCredentials,
+    ),
+    {
+      defaultSendOptions: { transport: 'klap' },
+      credentials: {
+        username: 'local@example.com',
+        password: 'local password',
+      },
+    },
+  );
+});
+
 test('discovery carries complete credentials without forcing an EP10 transport', () => {
   assert.deepEqual(
     getTpLinkDiscoveryClientOptions({

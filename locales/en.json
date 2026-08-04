@@ -20,7 +20,36 @@
                         "tpLinkEmail": "TP-Link account email",
                         "tpLinkEmailPlaceholder": "name@example.com",
                         "tpLinkPassword": "TP-Link account password",
-                        "tpLinkPasswordPlaceholder": "TP-Link account password"
+                        "tpLinkPasswordPlaceholder": "TP-Link account password",
+                        "credentialsRequired": "Enter complete TP-Link account credentials to pair this authenticated device.",
+                        "credentialsComplete": "Enter both the TP-Link account username and password, or clear both fields to use the global account.",
+                        "credentialsOverrideHint": "Leave both fields empty to use the configured global account. Enter a different complete account to create a device-only override.",
+                        "globalCredentials": "Using the configured TP-Link account ({{username}}).",
+                        "ep10CredentialsOptional": "TP-Link credentials are optional for TCP EP10 firmware, but required when the selected EP10 uses authenticated KLAP or AES firmware.",
+                        "ep10CredentialsRequired": "This EP10 uses authenticated firmware. Enter complete TP-Link account credentials and try again."
+                }
+        },
+        "settings": {
+                "credentials": {
+                        "title": "TP-Link account credentials",
+                        "subtitle": "Use one default account for authenticated TP-Link SMART devices. A device can keep a separate account override when needed.",
+                        "legend": "Default account",
+                        "username": "TP-Link account email",
+                        "password": "TP-Link account password",
+                        "replaceHint": "For security, the saved password is never shown. Enter both fields to replace it.",
+                        "save": "Validate and save default account",
+                        "clear": "Clear default account",
+                        "clearConfirm": "Clear the default TP-Link account? Devices using the global source will no longer have credentials until you save a new default or configure an override.",
+                        "configured": "A default TP-Link account is configured for {{username}}.",
+                        "notConfigured": "No default TP-Link account is configured.",
+                        "deviceSummary": "Devices: {{global}} global, {{override}} override, {{legacy}} legacy, {{unavailable}} without usable credentials.",
+                        "saved": "Default TP-Link account saved.",
+                        "cleared": "Default TP-Link account cleared.",
+                        "legacyLegend": "Legacy device credentials",
+                        "legacyHint": "Adopt only legacy devices whose complete local credentials exactly match the current default. Different local accounts remain untouched.",
+                        "adopt": "Adopt matching legacy devices",
+                        "adopted": "Adopted {{count}} matching legacy device(s).",
+                        "error": "Unable to update TP-Link credentials."
                 }
         }
 }

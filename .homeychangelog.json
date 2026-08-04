@@ -190,5 +190,8 @@
   },
   "0.3.1": {
     "en": "Added authenticated Kasa EP10 support for newer firmware, including improved automatic and manual IP pairing."
+  },
+  "0.3.2": {
+    "en": "Added validated app-wide TP-Link credentials with per-device overrides, legacy migration, secure pairing, and authenticated EP10 support."
   }
 }

@@ -39,6 +39,7 @@
       "KS230",
       "KP405",
       "HS103",
+      "HS107",
       "EP10",
       "KL400",
       "KL430",
@@ -80,6 +81,7 @@
       "KS230",
       "KP405",
       "HS103",
+      "HS107",
       "EP10",
       "KL400",
       "KL430",
@@ -259,6 +261,98 @@
                 "en": "Defines how often to poll the device for updates. Minimum is 2 seconds, maximum is 60 seconds.",
                 "nl": "Bepaalt hoe vaak het apparaat wordt gepolst voor updates. Minimum is 2 seconden, maximum is 60 seconden."
               }
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "collapsed": "true",
+          "label": {
+            "en": "Optional connection setting",
+            "nl": "Optionele verbindingsinstelling"
+          },
+          "children": [
+            {
+              "id": "dynamicIp",
+              "type": "checkbox",
+              "value": false,
+              "label": {
+                "en": "Enable for dynamic IP address:",
+                "nl": "Inschakelen voor dynamisch IP-adres:"
+              },
+              "hint": {
+                "en": "Enable this option if your TP-Link uses a dynamic IP address. The app will then attempt to re-discover the device when it becomes unreachable.",
+                "nl": "Zet deze optie aan als de TP-Link een dynamisch toegewezen IP adres gebruikt. De app zal dan pogen het apparaat opnieuw te vinden zodra het onbereikbaar wordt."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hs107",
+      "name": {
+        "en": "HS107(US)",
+        "nl": "HS107(US)"
+      },
+      "icon": "drivers/hs107/assets/icon.svg",
+      "images": {
+        "large": "drivers/hs107/assets/images/large.jpg",
+        "small": "drivers/hs107/assets/images/small.jpg"
+      },
+      "class": "socket",
+      "capabilities": [
+        "onoff",
+        "ledonoff"
+      ],
+      "mobile": {
+        "components": [
+          {
+            "id": "icon",
+            "capabilities": [
+              "onoff"
+            ]
+          },
+          {
+            "id": "toggle",
+            "capabilities": [
+              "onoff"
+            ]
+          }
+        ]
+      },
+      "pair": [
+        {
+          "id": "start"
+        },
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_plugs"
+          }
+        },
+        {
+          "id": "add_plugs",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "General settings",
+            "nl": "Algemene instellingen"
+          },
+          "children": [
+            {
+              "id": "settingIPAddress",
+              "type": "text",
+              "label": {
+                "en": "IP address",
+                "nl": "IP adres"
+              },
+              "value": "0.0.0.0"
             }
           ]
         },
@@ -3936,7 +4030,7 @@
           {
             "name": "device",
             "type": "device",
-            "filter": "driver_id=hs100|hs110|hs200|ks200m|hs210|hs220|kp115|ks230|kp105|hs300|ep25"
+            "filter": "driver_id=hs100|hs110|hs200|ks200m|hs210|hs220|kp115|ks230|kp105|hs300|ep25|hs107"
           }
         ]
       },
@@ -3954,7 +4048,7 @@
           {
             "name": "device",
             "type": "device",
-            "filter": "driver_id=hs100|hs110|hs200|ks200m|hs210|hs220|kp115|ks230|kp105|hs300|ep25"
+            "filter": "driver_id=hs100|hs110|hs200|ks200m|hs210|hs220|kp115|ks230|kp105|hs300|ep25|hs107"
           }
         ]
       },

@@ -1,0 +1,126 @@
+<script>
+	let discoveredDevices = [];
+	let manualDiscoveryPending = false;
+
+	Homey.setTitle(__('pair.start.title'));
+
+	Homey.on('error', function (errortype) {
+		let errorMessage;
+
+		switch (errortype) {
+			case 'error':
+				errorMessage = __('pair.start.error');
+				break;
+			case 'nosettings':
+				errorMessage = __('pair.start.nosettings');
+				break;
+			case 'session_not_found':
+				errorMessage = __('pair.start.session_not_found');
+				break;
+			default:
+				errorMessage = __('pair.start.unknown_error');
+				break;
+		}
+
+		Homey.alert(errorMessage, 'error');
+		$('#startdiscovery').removeClass('is-loading');
+		$('#saveSettings').removeClass('is-loading');
+	});
+
+	Homey.on('continue', function () {
+		Homey.showView('list_devices');
+	});
+
+	function showDiscoveryResult(devices) {
+		$('#startdiscovery').removeClass('is-loading');
+		$('#saveSettings').removeClass('is-loading');
+		discoveredDevices = Array.isArray(devices) ? devices : [];
+		const list = document.getElementById('deviceList');
+		list.innerHTML = '';
+
+		discoveredDevices.forEach(device => {
+			const item = document.createElement('div');
+			item.textContent = device.name + ' (' + device.ip + ')';
+			list.appendChild(item);
+		});
+
+		document.getElementById('manualEntry').style.display = 'none';
+		if (manualDiscoveryPending && discoveredDevices.length > 0) {
+			manualDiscoveryPending = false;
+			Homey.emit('get_devices', discoveredDevices);
+		}
+	}
+
+	Homey.on('discovered_devices', showDiscoveryResult);
+
+	Homey.on('discovery_failed', function () {
+		manualDiscoveryPending = false;
+		discoveredDevices = [];
+		 document.getElementById('discovery').style.display = 'none';
+		$('#startdiscovery').removeClass('is-loading');
+		$('#saveSettings').removeClass('is-loading');
+		Homey.alert(__('pair.start.nodevice'), 'error');
+	});
+
+	function startDiscovery(data, isManual) {
+		$('#startdiscovery').addClass('is-loading');
+		$('#saveSettings').addClass('is-loading');
+		document.getElementById('discovery').style.display = 'block';
+		manualDiscoveryPending = Boolean(isManual);
+		Homey.emit('discover', data, function (error) {
+			if (error) {
+				Homey.alert(__('pair.start.error'), 'error');
+				manualDiscoveryPending = false;
+			}
+		});
+	}
+
+	$('#startdiscovery').on('click', function () {
+		startDiscovery({}, false);
+	});
+
+	function saveSettings() {
+		if (discoveredDevices.length > 0) {
+			Homey.emit('get_devices', discoveredDevices);
+			return;
+		}
+
+		const inputIPAddress = document.getElementById('ipAddress').value.trim();
+		const ipv4RegEx = new RegExp('^(([01]?\\d\\d?|2[0-4]\\d|25[0-5]).){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$');
+		if (!ipv4RegEx.test(inputIPAddress)) {
+			Homey.alert(__('pair.start.invalidIP'), 'error');
+			return;
+		}
+
+		startDiscovery([{ ip: inputIPAddress }], true);
+	}
+</script>
+
+<div id="discovery" style="display: none">
+	<p data-i18n="pair.start.discovery"></p>
+	<div id="deviceList"></div>
+</div>
+
+<div id="manualEntry">
+	<p><span data-i18n="pair.start.intro"></span></p>
+	<p>
+		<center>
+			<button class="homey-button-small" id="startdiscovery"><span
+					data-i18n="pair.start.startdiscovery"></span></button>
+		</center>
+	</p>
+
+	<table class="pairSettings">
+		<tr>
+			<td style="width:100px;"><span data-i18n="pair.start.ipAddress"></span></td>
+			<td><input id="ipAddress" type="text" value="" placeholder="192.168.1.10" /></td>
+		</tr>
+	</table>
+</div>
+
+<fieldset>
+	<center>
+		<button class="homey-button-primary-full" id="saveSettings" onclick="saveSettings()"><span
+				data-i18n="pair.start.saveSettings"></span></button>
+	</center>
+</fieldset>

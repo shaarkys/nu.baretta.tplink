@@ -18,6 +18,7 @@ Features vary by model and hardware or firmware revision.
 | Category | Models | Main Homey features |
 | --- | --- | --- |
 | Plugs and outlets | HS100, HS103, HS105, HS110, EP10, EP25, KP105, KP115, KP200, KP303 | On/off, LED control, and energy measurements on supported models |
+| Two-outlet plug | HS107 | Two separately paired outlets, local LAN on/off, and one shared parent-level LED; no energy monitoring or account credentials |
 | Power strips and outdoor outlets | HS300, EP40, KP400 | Separately paired outlets where supported, on/off, LED control, and energy measurements on supported models |
 | Dimmable outdoor plug | KP405 | On/off, dimming, and LED control |
 | Wall switches and dimmers | ES20M, HS200, HS210, HS220, KS225, KS230, S500D | On/off, dimming where supported, LED control, and model-specific measurements |
@@ -50,6 +51,8 @@ This support has passed API fixtures, automated tests, dependency checks, and Ho
 4. If discovery is blocked by a VLAN, Wi-Fi isolation, firewall, or router configuration, enter the device IP address manually.
 5. For KS225, S500D, or KS240, use the configured default TP-Link account or provide a complete account pair. A different complete pair becomes a device-only override. Pairing validates the selected physical target before it is saved.
 6. Select all discovered devices or channels that you want to add.
+
+HS107 discovery presents both physical outlets as separate Homey socket devices. They share the unit's parent-level status LED and use credential-free local Kasa LAN control; HS107 does not provide energy measurements.
 
 EP10 devices that use the original TCP transport can pair without credentials. Authenticated KLAP or AES EP10 firmware requires a complete account pair; a TCP pairing never stores or creates a global account from unused credentials.
 

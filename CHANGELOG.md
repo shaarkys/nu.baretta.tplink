@@ -2,6 +2,11 @@
 
 **Unreleased**
 
+### HS107 legacy LAN support
+
+- Added credential-free local LAN support for HS107, with both physical outlets paired separately and each outlet providing on/off control plus the shared parent-level LED.
+- Physical-device confirmation is still requested.
+
 ### New authenticated SMART-device support
 
 - Added local discovery, pairing, status polling, and control for newer authenticated TP-Link SMART devices.

@@ -193,5 +193,8 @@
   },
   "0.3.2": {
     "en": "Added validated app-wide TP-Link credentials with per-device overrides, legacy migration, secure pairing, and authenticated EP10 support."
+  },
+  "0.3.3": {
+    "en": "Added experimental local-LAN support for TP-Link Kasa HS107, with both outlets paired separately and supporting independent on/off plus shared LED control."
   }
 }

@@ -196,5 +196,8 @@
   },
   "0.3.3": {
     "en": "Added experimental local-LAN support for TP-Link Kasa HS107, with both outlets paired separately and supporting independent on/off plus shared LED control."
+  },
+  "0.3.4": {
+    "en": "Improved automatic IP rediscovery across affected TP-Link devices, including timeout recovery, isolated discovery sessions, and safer retry handling."
   }
 }

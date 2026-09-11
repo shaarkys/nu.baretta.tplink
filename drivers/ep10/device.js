@@ -1,5 +1,6 @@
 'use strict';
 const Homey = require('homey');
+const { getRecovery } = require('../../lib/tplink-recovery');
 const {
     Client
 } = require('tplink-smarthome-api');
@@ -57,6 +58,7 @@ function getDiscoveredTransport(plug) {
 class TPlinkPlugDevice extends Homey.Device {
 
     async onInit() {
+        getRecovery(this).initialize();
         this.log('device init');
         let device = this;
 
@@ -146,6 +148,7 @@ class TPlinkPlugDevice extends Homey.Device {
 
     // this method is called when the Device is deleted
     onDeleted() {
+        getRecovery(this).destroy();
         let id = this.getData().id;
         this.log("Device deleted: " + id);
         clearInterval(this.pollingInterval);
@@ -188,6 +191,7 @@ class TPlinkPlugDevice extends Homey.Device {
     }
 
     async onSettings({ oldSettings = {}, newSettings = {}, changedKeys = [] }) {
+        await getRecovery(this).settingsChanged(changedKeys);
         let candidateSettings = {};
         try {
             const currentSettings = this.getSettings() || {};
@@ -394,6 +398,10 @@ class TPlinkPlugDevice extends Homey.Device {
     }
 
     async getStatus() {
+        const recovery = getRecovery(this);
+        const poll = recovery.beginPoll();
+        if (!poll) return;
+
         let settings = this.getSettings();
         let device = settings.settingIPAddress;
         let TPlinkModel = getDriverName().toUpperCase();
@@ -401,9 +409,11 @@ class TPlinkPlugDevice extends Homey.Device {
 
         try {
             const sysInfo = await this.client.getSysInfo(device);
+            if (!recovery.isCurrent(poll)) return;
             this.plug = this.client.getPlug({ host: device, sysInfo });
 
             const data = await this.plug.getInfo();
+            if (!recovery.responded(poll)) return;
 
             // **Processing data starts here**
 
@@ -468,22 +478,12 @@ class TPlinkPlugDevice extends Homey.Device {
                 }
             }
 
-        } catch (err) {
-            var errRegEx = new RegExp("EHOSTUNREACH|ETIMEDOUT|ENETUNREACH|ECONNREFUSED", 'g');
-            const safeError = getSafeErrorMessage(err, settings, getGlobalCredentials(this));
-            if (safeError.match(errRegEx)) {
-                this.unreachableCount += 1;
-                this.log("Device unreachable. Unreachable count: " + this.unreachableCount + " Discover count: " + this.discoverCount + " DynamicIP option: " + settings["dynamicIp"]);
 
-                // Attempt autodiscovery once every hour
-                if ((this.unreachableCount % 360 == 3) && settings["dynamicIp"]) {
-                    this.setUnavailable("Device offline");
-                    this.discoverCount += 1;
-                    this.log("Unreachable, starting autodiscovery");
-                    this.discover();
-                }
-            }
-            this.log("Caught error in getStatus function: " + safeError);
+            await recovery.succeeded(poll);
+        } catch (error) {
+            await recovery.failed(poll, error);
+        } finally {
+            recovery.endPoll(poll);
         }
     }
 
@@ -501,9 +501,7 @@ class TPlinkPlugDevice extends Homey.Device {
 
 
     stopActiveDiscovery() {
-        if (this.activeDiscovery !== undefined && this.activeDiscovery !== null) {
-            this.activeDiscovery.finish();
-        }
+        getRecovery(this).cancel();
     }
 
     isConfiguredForGlobalCredentials() {
@@ -592,81 +590,21 @@ class TPlinkPlugDevice extends Homey.Device {
     }
 
     async discover() {
-        this.stopActiveDiscovery();
-
-        const settings = this.getSettings();
-        const discoveryClient = new Client(getTpLinkDiscoveryClientOptions(settings, getGlobalCredentials(this)));
-        const discoveryOptions = {
-            deviceTypes: ['plug'],
-            discoveryInterval: 10000,
-            discoveryTimeout: 5000,
-            offlineTolerance: 3
-        };
-        const pendingCandidates = new Set();
-        let finished = false;
-        let finishTimer = null;
-
-        const finishDiscovery = () => {
-            if (finished) return;
-            finished = true;
-            if (finishTimer !== null) clearTimeout(finishTimer);
-            discoveryClient.stopDiscovery();
-            discoveryClient.removeAllListeners();
-            if (this.activeDiscovery && this.activeDiscovery.client === discoveryClient) {
-                this.activeDiscovery = null;
-            }
-        };
-
-        const handleDiscoveredPlug = async plug => {
-            if (finished) return;
-
-            const candidateKey = plug.deviceId || plug.host;
-            if (!candidateKey || pendingCandidates.has(candidateKey)) return;
-            pendingCandidates.add(candidateKey);
-
-            try {
+        return getRecovery(this).discover({
+            createClient: settings => new Client(getTpLinkDiscoveryClientOptions(settings, getGlobalCredentials(this))),
+            type: 'plug',
+            resolveCandidate: async (plug, settings) => {
                 const sysInfo = await plug.getSysInfo();
-                const model = typeof sysInfo.model === 'string' ? sysInfo.model : plug.model;
-                const deviceId = sysInfo.deviceId || sysInfo.device_id || plug.deviceId;
-                if (
-                    finished ||
-                    !String(model || '').toUpperCase().startsWith(TPlinkModel) ||
-                    !deviceId ||
-                    deviceId !== settings.deviceId
-                ) return;
-
+                const model = sysInfo.model || plug.model;
+                if (!String(model || '').toUpperCase().startsWith(TPlinkModel)) return null;
                 const transport = getDiscoveredTransport(plug);
-                await this.setSettings({ settingIPAddress: plug.host });
-                this.updateInMemoryTransport(transport, settings);
-                await this.setAvailable();
-                this.log('Discovered online plug: ' + deviceId);
-                this.log('Resetting unreachable count to 0');
-                this.unreachableCount = 0;
-                this.discoverCount = 0;
-                finishDiscovery();
-            } catch (err) {
-                this.log('Error during EP10 discovery: ' + getSafeErrorMessage(err, settings, getGlobalCredentials(this)));
-            } finally {
-                pendingCandidates.delete(candidateKey);
-            }
-        };
-
-        discoveryClient.on('plug-new', handleDiscoveredPlug);
-        discoveryClient.on('plug-online', handleDiscoveredPlug);
-        discoveryClient.on('error', err => {
-            if (!finished) {
-                this.log('EP10 discovery failed: ' + getSafeErrorMessage(err, settings, getGlobalCredentials(this)));
-            }
+                return {
+                    deviceId: sysInfo.deviceId || sysInfo.device_id || plug.deviceId,
+                    host: plug.host,
+                    afterSave: () => this.updateInMemoryTransport(transport, { ...settings, settingIPAddress: plug.host }),
+                };
+            },
         });
-
-        this.activeDiscovery = { client: discoveryClient, finish: finishDiscovery };
-        try {
-            discoveryClient.startDiscovery(discoveryOptions);
-            finishTimer = setTimeout(finishDiscovery, discoveryOptions.discoveryTimeout + 25);
-        } catch (err) {
-            this.log('Unable to start EP10 discovery: ' + getSafeErrorMessage(err, settings, getGlobalCredentials(this)));
-            finishDiscovery();
-        }
     }
 
 }

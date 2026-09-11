@@ -3,6 +3,7 @@
 // process.env.DEBUG = 'tplink-smarthome-api*';
 
 const Homey = require('homey');
+const { getRecovery } = require('../../lib/tplink-recovery');
 const {
     Client
 } = require('tplink-smarthome-api');
@@ -39,6 +40,7 @@ class TPlinkPlugDevice extends Homey.Device {
     }
 
     async onInit() {
+        getRecovery(this).initialize();
         this.log('KP200 device initialization');
         // Generate a random interval and assign it to 'interval'
         let interval = this.generateRandomInterval();
@@ -104,6 +106,7 @@ class TPlinkPlugDevice extends Homey.Device {
 
     // This method is called when the Device is deleted
     onDeleted() {
+        getRecovery(this).destroy();
         let id = this.getData().id;
         let childId = this.getData().childId; // Retrieve the childId for the socket
 
@@ -128,6 +131,7 @@ class TPlinkPlugDevice extends Homey.Device {
     }
 
     async onSettings({ oldSettings, newSettings, changedKeys }) {
+        await getRecovery(this).settingsChanged(changedKeys);
         try {
             for (const key of changedKeys) {
                 switch (key) {
@@ -217,6 +221,10 @@ async reinitializeConnection(ipAddress) {
     }
 
     async getStatus() {
+        const recovery = getRecovery(this);
+        const poll = recovery.beginPoll();
+        if (!poll) return;
+
         let settings = this.getSettings();
         let device = settings.settingIPAddress;
         let childId = this.getData().childId; // Retrieve the childId
@@ -225,6 +233,8 @@ async reinitializeConnection(ipAddress) {
 
         try {
             const sysInfo = await client.getSysInfo(device);
+            if (!recovery.responded(poll)) return;
+            if (!recovery.isCurrent(poll)) return;
             this.plug = client.getPlug({ host: device, sysInfo: sysInfo, childId: childId });
 
             // Check the relay state of the specific socket
@@ -234,27 +244,18 @@ async reinitializeConnection(ipAddress) {
             this.setCapabilityValue('onoff', relayState).catch(this.error);
             this.log('Relay state for child socket ' + childId + ' is ' + (relayState ? 'on' : 'off'));
 
-        } catch (err) {
-            this.handleErrors(err, settings);
+
+            await recovery.succeeded(poll);
+        } catch (error) {
+            await recovery.failed(poll, error);
+        } finally {
+            recovery.endPoll(poll);
         }
     }
 
 
     handleErrors(err, settings) {
-        if (err.code === 'ECONNRESET') {
-            this.log("Connection reset error: " + err.message);
-            // Cooldown delay of 10 seconds
-            return new Promise(resolve => setTimeout(resolve, 10000));
-        } else if (err.message.includes("EHOSTUNREACH")) {
-            this.log(`Device unreachable. DynamicIP option: ${settings["dynamicIp"]}`);
-            if (settings["dynamicIp"]) {
-                this.setUnavailable("Device offline");
-                this.discover();
-            }
-        } else {
-            // other logs silent
-            //   this.log("Caught error in getStatus function: " + err.message);
-        }
+        return getRecovery(this).failed(null, err);
     }
 
 
@@ -275,57 +276,10 @@ async reinitializeConnection(ipAddress) {
 
 
     async discover() {
-        let settings = this.getSettings();
-        var discoveryOptions = {
-            deviceTypes: 'plug',
-            discoveryInterval: 10000,
-            discoveryTimeout: 5000,
-            offlineTolerance: 3
-        };
-
-        try {
-            // Start discovering new plugs
-            const discovery = client.startDiscovery(discoveryOptions);
-
-            // Handle the event when a new plug is discovered
-            discovery.on('plug-new', async (plug) => {
-                try {
-                    this.log("Discovered new plug: Host - " + plug.host + ", Device ID - " + plug.deviceId);
-
-                    if (plug.deviceId === settings["deviceId"]) {
-                        await this.setSettings({
-                            settingIPAddress: plug.host
-                        });
-                        client.stopDiscovery();
-                        this.log("Updated settings for discovered plug: " + plug.deviceId);
-                        this.setAvailable();
-                    }
-                } catch (error) {
-                    this.log('Error handling new plug discovery: ' + error.message);
-                }
-            });
-
-            // Handle the event when a plug comes online
-            discovery.on('plug-online', async (plug) => {
-                try {
-                    this.log("Discovered online plug: Host - " + plug.host + ", Device ID - " + plug.deviceId);
-
-                    if (plug.deviceId === settings["deviceId"]) {
-                        await this.setSettings({
-                            settingIPAddress: plug.host
-                        });
-                        client.stopDiscovery();
-                        this.log("Updated settings for online plug: " + plug.deviceId);
-                        this.setAvailable();
-                    }
-                } catch (error) {
-                    this.log('Error handling online plug: ' + error.message);
-                }
-            });
-        } catch (err) {
-            this.log("Caught error in discover function: " + err.message);
-            // Implement retry logic or further error handling as needed
-        }
+        return getRecovery(this).discover({
+            createClient: () => new Client(),
+            type: 'plug',
+        });
     }
 
 

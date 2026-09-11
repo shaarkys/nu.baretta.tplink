@@ -1,6 +1,7 @@
 'use strict';
 
 const Homey = require('homey');
+const { getRecovery } = require('../../lib/tplink-recovery');
 const { Client } = require('tplink-smarthome-api');
 const {
   getTpLinkClientOptions,
@@ -34,14 +35,11 @@ function createClientFromSettings(device, settings, { timeout } = {}) {
   return new Client(options);
 }
 
-function isReachabilityError(error) {
-  return /(EHOSTUNREACH|ETIMEDOUT|ENETUNREACH|ECONNREFUSED)/.test(
-    error && error.message ? error.message : ''
-  );
-}
+
 
 class TPlinkKs240Device extends Homey.Device {
   async onInit() {
+        getRecovery(this).initialize();
     this.log('KS240 device initialization');
     this.unreachableCount = 0;
     this.discoverCount = 0;
@@ -89,6 +87,7 @@ class TPlinkKs240Device extends Homey.Device {
   }
 
   onDeleted() {
+        getRecovery(this).destroy();
     this.log('Device deleted: ' + this.getData().id + ', Child ID: ' + this.childId);
     clearInterval(this.pollingInterval);
     this.stopActiveDiscovery();
@@ -123,6 +122,7 @@ class TPlinkKs240Device extends Homey.Device {
   }
 
   async onSettings({ oldSettings = {}, newSettings = {}, changedKeys = [] }) {
+        await getRecovery(this).settingsChanged(changedKeys);
     let candidateSettings = {};
     try {
       const currentSettings = this.getSettings() || {};
@@ -402,13 +402,19 @@ class TPlinkKs240Device extends Homey.Device {
   }
 
   async getStatus() {
+        const recovery = getRecovery(this);
+        const poll = recovery.beginPoll();
+        if (!poll) return;
+
     const settings = this.getSettings();
     const device = settings.settingIPAddress;
     this.log('getStatus for device: ' + device + ', Child ID: ' + this.childId);
 
     try {
       const { sysInfo, plug } = await this.getPlug(device);
+            if (!recovery.isCurrent(poll)) return;
       const childInfo = await plug.getSysInfo();
+            if (!recovery.responded(poll)) return;
       const deviceId = settings.deviceId || sysInfo.deviceId || sysInfo.device_id;
 
       if (deviceId && settings.deviceId !== deviceId) {
@@ -433,37 +439,13 @@ class TPlinkKs240Device extends Homey.Device {
         await this.setCapabilityIfChanged('dim', brightness / 100);
       }
 
-      if (!this.getAvailable()) {
-        await this.setAvailable().catch(this.error);
-      }
-      this.unreachableCount = 0;
-      this.discoverCount = 0;
-    } catch (error) {
-      if (isReachabilityError(error)) {
-        this.unreachableCount += 1;
-        this.log(
-          'Device unreachable. Unreachable count: ' +
-            this.unreachableCount +
-            ' Discover count: ' +
-            this.discoverCount +
-            ' DynamicIP option: ' +
-            settings.dynamicIp
-        );
-
-        if (this.unreachableCount % 360 === 3 && settings.dynamicIp) {
-          await this.setUnavailable('Device offline').catch(this.error);
-          this.discoverCount += 1;
-          this.log('Unreachable, starting autodiscovery');
-          this.discover();
+            await recovery.succeeded(poll);
+        } catch (error) {
+            await recovery.failed(poll, error);
+        } finally {
+            recovery.endPoll(poll);
         }
-      }
-
-      this.log(
-        'Caught error in getStatus function: ' +
-          getSafeErrorMessage(error, settings, getGlobalCredentials(this))
-      );
     }
-  }
 
   pollDevice(interval) {
     clearInterval(this.pollingInterval);
@@ -480,10 +462,8 @@ class TPlinkKs240Device extends Homey.Device {
   }
 
   stopActiveDiscovery() {
-    if (this.activeDiscovery) {
-      this.activeDiscovery.finish();
+        getRecovery(this).cancel();
     }
-  }
 
   isConfiguredForGlobalCredentials() {
     return this.getSettings().credentialSource !== CREDENTIAL_SOURCES.OVERRIDE;
@@ -554,66 +534,13 @@ class TPlinkKs240Device extends Homey.Device {
   }
 
   discover() {
-    this.stopActiveDiscovery();
-    const settings = this.getSettings();
-    const client = this.client;
-    const discoveryOptions = {
-      deviceTypes: 'plug',
-      discoveryInterval: 10000,
-      discoveryTimeout: 5000,
-      offlineTolerance: 3,
-      breakoutChildren: false,
-    };
-    let finished = false;
-    let finishTimer = null;
-
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      if (finishTimer !== null) clearTimeout(finishTimer);
-      client.removeAllListeners();
-      client.stopDiscovery();
-      if (this.activeDiscovery && this.activeDiscovery.client === client) {
-        this.activeDiscovery = null;
-      }
-    };
-
-    const handleDiscoveredPlug = async plug => {
-      if (finished) return;
-      try {
-        if (plug.model !== 'KS240' && !String(plug.model).startsWith('KS240')) {
-          return;
-        }
-
-        if (plug.deviceId === settings.deviceId) {
-          await this.setSettings({ settingIPAddress: plug.host });
-          this.log('Updated KS240 host for device: ' + plug.deviceId);
-          await this.setAvailable().catch(this.error);
-          this.unreachableCount = 0;
-          this.discoverCount = 0;
-          finish();
-        }
-      } catch (error) {
-        this.log('Error during KS240 discovery: ' + getSafeErrorMessage(error, settings, getGlobalCredentials(this)));
-      }
-    };
-
-    this.activeDiscovery = { client, finish };
-    try {
-      client.on('plug-new', handleDiscoveredPlug);
-      client.on('plug-online', handleDiscoveredPlug);
-      client.on('error', error => {
-        if (!finished) {
-          this.log('KS240 discovery failed: ' + getSafeErrorMessage(error, settings, getGlobalCredentials(this)));
-        }
-      });
-      client.startDiscovery(discoveryOptions);
-      finishTimer = setTimeout(finish, discoveryOptions.discoveryTimeout + 25);
-    } catch (error) {
-      this.log('KS240 discovery failed: ' + getSafeErrorMessage(error, settings, getGlobalCredentials(this)));
-      finish();
+        return getRecovery(this).discover({
+            createClient: settings => createClientFromSettings(this, settings),
+            type: 'plug',
+            resolveCandidate: plug => String(plug.model || '').startsWith('KS240')
+                ? { deviceId: plug.deviceId, host: plug.host } : null,
+        });
     }
-  }
 }
 
 module.exports = TPlinkKs240Device;

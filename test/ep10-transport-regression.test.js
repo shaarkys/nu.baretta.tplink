@@ -317,6 +317,7 @@ test('EP10 rediscovery keeps the existing client and transport when the IP setti
   device.getSettings = () => ({
     settingIPAddress: '192.0.2.4',
     deviceId: 'device-id',
+    dynamicIp: true,
     deviceUsername: 'account@example.com',
     devicePassword: 'secret-password',
   });

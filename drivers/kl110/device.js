@@ -1,5 +1,6 @@
 'use strict';
 const Homey = require('homey');
+const { getRecovery } = require('../../lib/tplink-recovery');
 const {
     Client
 } = require('tplink-smarthome-api');
@@ -33,6 +34,7 @@ var options = {};
 class TPlinkBulbDevice extends Homey.Device {
 
     async onInit() {
+        getRecovery(this).initialize();
 
 
         this.log('device init');
@@ -128,6 +130,7 @@ class TPlinkBulbDevice extends Homey.Device {
 
     // this method is called when the Device is deleted
     onDeleted() {
+        getRecovery(this).destroy();
         let id = this.getData().id;
         this.log('device deleted: ', id);
         clearInterval(this.pollingInterval);
@@ -252,6 +255,7 @@ class TPlinkBulbDevice extends Homey.Device {
     }
 
 async onSettings({ oldSettings, newSettings, changedKeys }) {
+        await getRecovery(this).settingsChanged(changedKeys);
         try {
             for (const key of changedKeys) {
                 switch (key) {
@@ -432,6 +436,10 @@ async reinitializeConnection(ipAddress) {
 
 
     async getStatus() {
+        const recovery = getRecovery(this);
+        const poll = recovery.beginPoll();
+        if (!poll) return;
+
         let settings = this.getSettings();
         let device = settings.settingIPAddress;
         let deviceId = settings.deviceId;
@@ -440,23 +448,13 @@ async reinitializeConnection(ipAddress) {
 
         try {
             const sysInfo = await client.getSysInfo(device);
+            if (!recovery.isCurrent(poll)) return;
             this.bulb = client.getBulb({
                 host: device, sysInfo: sysInfo
             });
 
-            if (settings["deviceId"] === undefined) {
-                try {
-                    this.bulb.getSysInfo().then((info) => {
-                        this.log("Fetched bulb deviceId: " + info.deviceId);
-                        this.setSettings({
-                            deviceId: info.deviceId
-                        }).catch(this.error);
-                    }).catch(this.error)
-                } catch (err) {
-                    this.log("Caught error in setting deviceId: " + err.message);
-                }
-            } else {
-                //this.log("DeviceId: " + settings["deviceId"])
+            if (settings.deviceId === undefined && sysInfo.deviceId) {
+                await this.setSettings({ deviceId: sysInfo.deviceId });
             }
 
             this.oldColorTemp = this.getCapabilityValue('light_temperature');
@@ -467,6 +465,7 @@ async reinitializeConnection(ipAddress) {
             this.oldBulbState = this.getCapabilityValue('onoff') === true ? 1 : 0;
 
             await this.bulb.lighting.getLightState().then((bulbState) => {
+                    if (!recovery.responded(poll)) return;
 
                     if (this.oldBulbState !== bulbState.on_off) {
                          this.log('getLightState after change: ' + JSON.stringify(bulbState));
@@ -544,25 +543,13 @@ async reinitializeConnection(ipAddress) {
                 } else {
                     //    this.log("BulbState.on_off undefined or not changed")
                 }
-            })
-                .catch((err) => {
-                    var errRegEx = new RegExp("EHOSTUNREACH", 'g')
-                    if (err.message.match(errRegEx)) {
-                        this.unreachableCount += 1;
-                        this.log("Device unreachable. Unreachable count: " + this.unreachableCount + " Discover count: " + this.discoverCount + " DynamicIP option: " + settings["dynamicIp"]);
+            });
 
-                        // attempt autodiscovery once every hour
-                        if ((this.unreachableCount % 360 == 3) && settings["dynamicIp"]) {
-                            this.setUnavailable("Device offline");
-                            this.discoverCount += 1;
-                            this.log("Unreachable, starting autodiscovery");
-                            this.discover();
-                        }
-                    }
-                    this.log("Caught error in getStatus / getSysInfo function: " + err.message);
-                });
-        } catch (err) {
-            this.log("Caught error in getStatus function: " + err.message);
+            await recovery.succeeded(poll);
+        } catch (error) {
+            await recovery.failed(poll, error);
+        } finally {
+            recovery.endPoll(poll);
         }
     }
 
@@ -584,46 +571,10 @@ pollDevice(interval) {
     }
 
     discover() {
-        // TODO: rewrite with API's discovery options (timeout, excluded MAC addresses, interval)
-        let settings = this.getSettings();
-        var discoveryOptions = {
-            deviceTypes: 'bulb',
-            discoveryInterval: 10000,
-            discoveryTimeout: 5000,
-            offlineTolerance: 3
-        }
-        // discover new bulbs
-        client.startDiscovery(discoveryOptions);
-        client.on('bulb-new', (bulb) => {
-            if (bulb.deviceId == settings["deviceId"]) {
-                this.setSettings({
-                    settingIPAddress: bulb.host
-                }).catch(this.error);
-                setTimeout(function () {
-                    client.stopDiscovery()
-                }, 1000);
-                this.log("Discovered online bulb: " + bulb.deviceId);
-                this.log("Resetting unreachable count to 0");
-                this.unreachableCount = 0;
-                this.discoverCount = 0;
-                this.setAvailable();
-            }
-        })
-        client.on('bulb-online', (bulb) => {
-            if (bulb.deviceId == settings["deviceId"]) {
-                this.setSettings({
-                    settingIPAddress: bulb.host
-                }).catch(this.error);
-                setTimeout(function () {
-                    client.stopDiscovery()
-                }, 1000);
-                this.log("Discovered online bulb: " + bulb.deviceId);
-                this.log("Resetting unreachable count to 0");
-                this.unreachableCount = 0;
-                this.discoverCount = 0;
-                this.setAvailable();
-            }
-        })
+        return getRecovery(this).discover({
+            createClient: () => new Client(),
+            type: 'bulb',
+        });
     }
 
 }

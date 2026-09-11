@@ -1,6 +1,7 @@
 'use strict';
 
 const Homey = require('homey');
+const { getRecovery } = require('../../lib/tplink-recovery');
 const { Client } = require('tplink-smarthome-api');
 
 const client = new Client();
@@ -11,14 +12,11 @@ const DEFAULT_MOTION_THRESHOLD = 50;
 const DEFAULT_MOTION_TIMEOUT_SECONDS = 600;
 const DEFAULT_AMBIENT_LIGHT_LIMIT = 15;
 
-function isReachabilityError(error) {
-  return /(EHOSTUNREACH|ETIMEDOUT|ENETUNREACH|ECONNREFUSED)/.test(
-    error && error.message ? error.message : ''
-  );
-}
+
 
 class TPlinkKs200mDevice extends Homey.Device {
   async onInit() {
+        getRecovery(this).initialize();
     this.log('device init');
     this.unreachableCount = 0;
     this.discoverCount = 0;
@@ -66,6 +64,7 @@ class TPlinkKs200mDevice extends Homey.Device {
   }
 
   onDeleted() {
+        getRecovery(this).destroy();
     this.log('Device deleted: ' + this.getData().id);
     clearInterval(this.pollingInterval);
   }
@@ -103,6 +102,7 @@ class TPlinkKs200mDevice extends Homey.Device {
   }
 
   async onSettings({ newSettings, changedKeys }) {
+        await getRecovery(this).settingsChanged(changedKeys);
     try {
       const normalizedSettings = this.normalizeSettings(newSettings);
 
@@ -213,12 +213,18 @@ class TPlinkKs200mDevice extends Homey.Device {
   }
 
   async getStatus() {
+        const recovery = getRecovery(this);
+        const poll = recovery.beginPoll();
+        if (!poll) return;
+
     const settings = this.getSettings();
     const device = settings.settingIPAddress;
     this.log('getStatus device: ' + device + ', name: ' + this.getName());
 
     try {
       const { sysInfo, plug } = await this.getPlug(device);
+            if (!recovery.responded(poll)) return;
+            if (!recovery.isCurrent(poll)) return;
       const deviceId = sysInfo.deviceId || sysInfo.device_id;
 
       if (deviceId && settings.deviceId !== deviceId) {
@@ -286,34 +292,13 @@ class TPlinkKs200mDevice extends Homey.Device {
         }
       }
 
-      if (!this.getAvailable()) {
-        await this.setAvailable().catch(this.error);
-      }
-      this.unreachableCount = 0;
-      this.discoverCount = 0;
-    } catch (error) {
-      if (isReachabilityError(error)) {
-        this.unreachableCount += 1;
-        this.log(
-          'Device unreachable. Unreachable count: ' +
-            this.unreachableCount +
-            ' Discover count: ' +
-            this.discoverCount +
-            ' DynamicIP option: ' +
-            settings.dynamicIp
-        );
-
-        if (this.unreachableCount % 360 === 3 && settings.dynamicIp) {
-          await this.setUnavailable('Device offline').catch(this.error);
-          this.discoverCount += 1;
-          this.log('Unreachable, starting autodiscovery');
-          this.discover();
+            await recovery.succeeded(poll);
+        } catch (error) {
+            await recovery.failed(poll, error);
+        } finally {
+            recovery.endPoll(poll);
         }
-      }
-
-      this.log('Caught error in getStatus function: ' + error.message);
     }
-  }
 
   pollDevice(interval) {
     clearInterval(this.pollingInterval);
@@ -488,50 +473,11 @@ class TPlinkKs200mDevice extends Homey.Device {
   }
 
   discover() {
-    const settings = this.getSettings();
-    const discoveryOptions = {
-      deviceTypes: 'plug',
-      discoveryInterval: 10000,
-      discoveryTimeout: 5000,
-      offlineTolerance: 3,
-    };
-
-    try {
-      const discovery = client.startDiscovery(discoveryOptions);
-
-      discovery.on('plug-new', async plug => {
-        try {
-          if (plug.deviceId === settings.deviceId) {
-            await this.setSettings({ settingIPAddress: plug.host });
-            client.stopDiscovery();
-            this.log('Discovered online plug: ' + plug.deviceId);
-            await this.setAvailable().catch(this.error);
-            this.unreachableCount = 0;
-            this.discoverCount = 0;
-          }
-        } catch (error) {
-          this.log('Error updating settings during discovery: ' + error.message);
-        }
-      });
-
-      discovery.on('plug-online', async plug => {
-        try {
-          if (plug.deviceId === settings.deviceId) {
-            await this.setSettings({ settingIPAddress: plug.host });
-            client.stopDiscovery();
-            this.log('Discovered online plug: ' + plug.deviceId + ' is back online');
-            await this.setAvailable().catch(this.error);
-            this.unreachableCount = 0;
-            this.discoverCount = 0;
-          }
-        } catch (error) {
-          this.log('Error handling online plug during discovery: ' + error.message);
-        }
-      });
-    } catch (error) {
-      this.log('Discovery failed: ' + error.message);
+        return getRecovery(this).discover({
+            createClient: () => new Client(),
+            type: 'plug',
+        });
     }
-  }
 }
 
 module.exports = TPlinkKs200mDevice;

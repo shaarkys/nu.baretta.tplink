@@ -217,5 +217,8 @@
   },
   "0.3.10": {
     "en": "Fix HS200 authentication with new KLAP firmware (login_version 2) by adding TP-Link account credential support and dual TCP/KLAP transport selection"
+  },
+  "0.3.11": {
+    "en": "Additional logging for HS200"
   }
 }

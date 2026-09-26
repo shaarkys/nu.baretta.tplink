@@ -182,7 +182,9 @@ class TPlinkPlugDriver extends Homey.Driver {
             )
               ? plug.defaultSendOptions.transport
               : 'tcp';
-            this.log(`HS200 discovery: ${plug.host}, transport=${transport}, account=${credentialResolution ? credentialResolution.source : 'none'}`);
+            const advertisedVersion = plug.sysInfo && plug.sysInfo.mgt_encrypt_schm && plug.sysInfo.mgt_encrypt_schm.lv;
+            const loginVersion = Number.isInteger(advertisedVersion) ? advertisedVersion : 'unknown';
+            this.log(`HS200 discovery: ${plug.host}, transport=${transport}, login version=${loginVersion}, account=${credentialResolution ? credentialResolution.source : 'none'}`);
             if (isAuthenticatedTransport(transport) && !credentialResolution) {
               authenticationRequired = true;
               return;

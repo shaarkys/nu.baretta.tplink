@@ -1,5 +1,6 @@
 'use strict';
 const Homey = require('homey');
+const { isIP } = require('node:net');
 const { getRecovery } = require('../../lib/tplink-recovery');
 const { Client } = require('tplink-smarthome-api');
 
@@ -574,7 +575,7 @@ async powerOn(device) {
              /ECONNREFUSED[^\n]*:9999/.test(error && error.message || ''));
     }
 
-    async updateInMemoryTransport(transport, settings, protocol, current = () => true) {
+    async updateInMemoryTransport(transport, settings, protocol, current = () => true, source = 'rediscovery') {
         if (!isValidTpLinkTransport(transport) || !current()) return;
         const profile = { host: settings.settingIPAddress, transport, protocol };
         const previous = this.getStoreValue('tplinkConnection');
@@ -584,10 +585,37 @@ async powerOn(device) {
         if (!current()) return;
         this.activeTransport = transport;
         this.client = createClientFromSettings(this, getDeviceConnectionData(this), settings, transport);
-        this.log('Transport confirmed by rediscovery: ' + transport + ', protocol=' + protocol);
+        this.log('Transport confirmed by ' + source + ': ' + transport + ', protocol=' + protocol);
+    }
+
+    // Legacy pairings may lack a stored device ID, so IP rediscovery cannot
+    // match them after a firmware update disables the legacy TCP port.
+    // Probe the configured address directly instead of skipping recovery.
+    async probeTransportAtConfiguredIp(settings) {
+        const host = settings.settingIPAddress;
+        const probeConnectionData = { ...getDeviceConnectionData(this), transport: 'klap' };
+        const probeClient = createClientFromSettings(this, probeConnectionData, settings, 'klap');
+        try {
+            const sysInfo = await probeClient.getSysInfo(host);
+            if (!String(sysInfo.model || '').toUpperCase().startsWith(TPlinkModel)) {
+                throw new Error('unexpected model: ' + (sysInfo.model || 'unknown'));
+            }
+            const protocol = String(sysInfo.type || sysInfo.mic_type || '').startsWith('SMART.') ? 'smart' : 'iot';
+            await this.updateInMemoryTransport('klap', { ...settings, settingIPAddress: host }, protocol, () => true, 'direct probe');
+            this.log('Device at ' + host + ' answered over KLAP; legacy pairing recovered without re-pairing');
+        } catch (error) {
+            const message = getSafeErrorMessage(error, settings, getGlobalCredentials(this));
+            getRecovery(this).logChanged('directProbeFailure', message, 'Direct transport probe failed: ' + message);
+        }
     }
 
     async discover({ transportRecovery = false } = {}) {
+        const settings = this.getSettings();
+        if (transportRecovery && !settings.deviceId &&
+            isIP(settings.settingIPAddress) === 4) {
+            await this.probeTransportAtConfiguredIp(settings);
+            return;
+        }
         return getRecovery(this).discover({
             createClient: settings => new Client({ ...getTpLinkDiscoveryClientOptions(settings, getGlobalCredentials(this)), defaultSendOptions: { timeout: 4000 }, logLevel: 'silent' }),
             type: 'plug',

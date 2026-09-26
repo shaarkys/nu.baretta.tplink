@@ -170,7 +170,7 @@ test('HS200 uses the saved account, filters other models, validates once and rep
       && !error.message.includes(account.password));
     assert.equal(calls, 2);
     assert.equal(logs.some(line => line.includes(account.password)), false);
-    assert.ok(logs.some(line => /transport=klap, account=global/.test(line)));
+    assert.ok(logs.some(line => /transport=klap, login version=unknown, account=global/.test(line)));
     const cancelled = session.handlers.get('discover')({});
     session.handlers.get('cancel')();
     assert.deepEqual(await cancelled, []);
